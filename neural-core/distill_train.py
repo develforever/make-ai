@@ -16,36 +16,37 @@ from torch.utils.data import DataLoader, TensorDataset
 from architecture import MakeAIKANConversationalModel
 from sam_optimizer import SAM
 from ewc_memory import EWC, ReplayBuffer
+from precision_ops import FocalLossOHEM, compute_orthogonal_regularization, StochasticWeightAveraging
+from teacher_client import OllamaTeacherClient
 
 
-class DistillationLoss(nn.Module):
+class EnhancedDistillationLoss(nn.Module):
     """
-    Combined Soft-Target Distillation Loss + Cross Entropy:
-      L = (1 - alpha) * L_CE(student, y) + alpha * T^2 * KL(softmax(teacher/T) || softmax(student/T))
+    Combined Soft-Target Distillation Loss + Focal Loss with OHEM:
+      L = (1 - alpha) * L_Focal(student, y) + alpha * T^2 * KL(softmax(teacher/T) || softmax(student/T))
     """
 
-    def __init__(self, temperature: float = 2.0, alpha: float = 0.7):
+    def __init__(self, temperature: float = 2.0, alpha: float = 0.6, gamma: float = 2.0, ohem_ratio: float = 0.35):
         super().__init__()
         self.temperature = temperature
         self.alpha = alpha
-        self.ce = nn.CrossEntropyLoss()
+        self.focal = FocalLossOHEM(gamma=gamma, ohem_ratio=ohem_ratio)
         self.kl = nn.KLDivLoss(reduction="batchmean")
 
     def forward(self, student_logits: torch.Tensor, teacher_logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         b, t, v = student_logits.size()
         s_flat = student_logits.view(-1, v)
         t_flat = teacher_logits.view(-1, v)
-        y_flat = targets.view(-1)
 
-        # 1. Hard Cross Entropy
-        loss_ce = self.ce(s_flat, y_flat)
+        # 1. Focal Loss with OHEM for hard conversational tokens
+        loss_focal = self.focal(student_logits, targets)
 
-        # 2. Soft KL-Divergence
+        # 2. Soft Dark Knowledge transfer via KL-Divergence
         p_teacher = F.softmax(t_flat / self.temperature, dim=-1)
         log_p_student = F.log_softmax(s_flat / self.temperature, dim=-1)
         loss_kl = self.kl(log_p_student, p_teacher) * (self.temperature ** 2)
 
-        return (1.0 - self.alpha) * loss_ce + self.alpha * loss_kl
+        return (1.0 - self.alpha) * loss_focal + self.alpha * loss_kl
 
 
 def run_training_simulation(
@@ -56,8 +57,8 @@ def run_training_simulation(
     hidden_dim: int = 64
 ) -> dict:
     """
-    Simulates distillation training loop using synthetic teacher distributions,
-    verifying SAM optimizer updates and EWC consolidation.
+    Simulates distillation training loop with SAM, EWC, Focal Loss/OHEM,
+    Orthogonal Regularization, SWA, and Ollama Teacher Client.
     """
     device = torch.device("cpu")
     model = MakeAIKANConversationalModel(
@@ -71,38 +72,50 @@ def run_training_simulation(
     # SAM optimizer with AdamW as base
     base_optimizer = torch.optim.AdamW
     optimizer = SAM(model.parameters(), base_optimizer, lr=1e-3, rho=0.05, weight_decay=1e-4)
-    criterion = DistillationLoss(temperature=2.0, alpha=0.6)
+    criterion = EnhancedDistillationLoss(temperature=2.0, alpha=0.6, gamma=2.0, ohem_ratio=0.35)
+
+    # Stochastic Weight Averaging (SWA)
+    swa = StochasticWeightAveraging(model)
+
+    # Teacher Client (Ollama or mathematical fallback)
+    teacher = OllamaTeacherClient()
 
     # Replay buffer & EWC
     replay_buffer = ReplayBuffer(capacity=50)
     ewc = EWC(model, ewc_lambda=200.0)
 
-    # Synthetic conversational batches
     history_losses = []
 
     for step in range(num_steps):
-        # Generate synthetic input & target
         inputs = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
         targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
-        # Synthetic teacher logits (e.g. from local Ollama teacher)
+
+        # Teacher soft targets
         with torch.no_grad():
-            teacher_logits = torch.randn(batch_size, seq_len, vocab_size, device=device)
+            teacher_logits = teacher.generate_soft_targets(batch_size, seq_len, vocab_size, device=device)
 
         # First forward-backward pass (Ascent step in SAM)
         model.zero_grad()
-        student_logits, telemetry = model(inputs)
-        loss = criterion(student_logits, teacher_logits, targets) + ewc.penalty()
+        student_logits, _ = model(inputs)
+        loss = criterion(student_logits, teacher_logits, targets) + ewc.penalty() + compute_orthogonal_regularization(model, beta=1e-4)
         loss.backward()
         optimizer.first_step(zero_grad=True)
 
         # Second forward-backward pass (Gradient at perturbed point)
         student_logits_ascent, _ = model(inputs)
-        loss_ascent = criterion(student_logits_ascent, teacher_logits, targets) + ewc.penalty()
+        loss_ascent = criterion(student_logits_ascent, teacher_logits, targets) + ewc.penalty() + compute_orthogonal_regularization(model, beta=1e-4)
         loss_ascent.backward()
         optimizer.second_step(zero_grad=True)
 
+        # SWA: accumulate weights in second half of training
+        if step >= num_steps // 2:
+            swa.update()
+
         history_losses.append(float(loss.item()))
         replay_buffer.push({"input": inputs.cpu(), "target": targets.cpu()})
+
+    # Apply SWA weights to model
+    swa.apply_to_model()
 
     # Consolidate foundational knowledge via Fisher Information Matrix
     sample_inputs = torch.randint(0, vocab_size, (8, seq_len), device=device)
@@ -132,7 +145,9 @@ def run_training_simulation(
         "loss_progression": history_losses,
         "checkpoint_path": checkpoint_path,
         "fisher_diagnostics": fisher_stats,
-        "model_summary": model.count_parameters()
+        "model_summary": model.count_parameters(),
+        "swa_models_accumulated": swa.n_models,
+        "teacher_online": teacher.is_connected
     }
 
 
@@ -140,3 +155,4 @@ if __name__ == "__main__":
     print("Running training and distillation simulation...")
     results = run_training_simulation(num_steps=10)
     print(json.dumps(results, indent=2))
+

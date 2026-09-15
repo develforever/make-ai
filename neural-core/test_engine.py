@@ -142,6 +142,39 @@ class TestNeuralEngine(unittest.TestCase):
         summary = model.count_parameters()
         self.assertGreater(summary["kan_spline_parameters"], 0)
 
+    def test_07_precision_ops_and_distillation(self):
+        """Verify FocalLoss with OHEM, Orthogonal Regularization, and SWA."""
+        from precision_ops import FocalLossOHEM, compute_orthogonal_regularization, StochasticWeightAveraging
+        from teacher_client import OllamaTeacherClient
+
+        logits = torch.randn(4, 10, 32, requires_grad=True)
+        targets = torch.randint(0, 32, (4, 10))
+
+        # 1. Focal Loss OHEM
+        criterion = FocalLossOHEM(gamma=2.0, ohem_ratio=0.5)
+        loss = criterion(logits, targets)
+        loss.backward()
+        self.assertTrue(torch.isfinite(loss))
+        self.assertIsNotNone(logits.grad)
+
+        # 2. Orthogonal Regularization
+        toy_model = nn.Sequential(nn.Linear(16, 16))
+        toy_model[0].base_weight = nn.Parameter(torch.eye(16))
+        ortho = compute_orthogonal_regularization(toy_model, beta=1.0)
+        self.assertAlmostEqual(ortho.item(), 0.0, places=4)
+
+        # 3. SWA
+        swa = StochasticWeightAveraging(toy_model)
+        toy_model[0].base_weight.data += 1.0
+        swa.update()
+        self.assertEqual(swa.n_models, 1)
+
+        # 4. Teacher client fallback
+        teacher = OllamaTeacherClient()
+        soft = teacher.generate_soft_targets(2, 4, 32)
+        self.assertEqual(soft.shape, (2, 4, 32))
+
 
 if __name__ == "__main__":
     unittest.main()
+

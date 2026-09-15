@@ -672,19 +672,31 @@
               <td><strong>Lokalizacja Nieliniowości</strong></td>
               <td>Statyczne węzły (ReLU / GELU)</td>
               <td class="metric-highlight">Krawędzie połączeń (B-splajny rzędu k=3 + Mish)</td>
-              <td class="metric-highlight">neural-core/kan_layer.py (Zweryfikowano)</td>
+              <td class="metric-highlight">neural-core/kan_layer.py (PyTorch + TS)</td>
             </tr>
             <tr>
               <td><strong>Routing Parametrów</strong></td>
               <td>Brak (wszystkie tokeny przez 100% wag)</td>
               <td class="metric-highlight">SOM Top-2 MoE (Siatka 4 mikro-ekspertów)</td>
-              <td class="metric-highlight">neural-core/som_router.py (Zweryfikowano)</td>
+              <td class="metric-highlight">neural-core/som_router.py (Top-2 Sparsity)</td>
             </tr>
             <tr>
               <td><strong>Ochrona Składni</strong></td>
               <td>Zanika (Catastrophic Forgetting)</td>
-              <td class="metric-highlight">EWC (Empiryczna Macierz Fishera) + Replay</td>
+              <td class="metric-highlight">EWC (Empiryczna Macierz Fishera) + Replay Buffer</td>
               <td class="metric-highlight">neural-core/ewc_memory.py (Zweryfikowano)</td>
+            </tr>
+            <tr>
+              <td><strong>Precyzja bez Wzrostu Wag</strong></td>
+              <td>Zwykły AdamW + CrossEntropy</td>
+              <td class="metric-highlight">SAM + SWA + Focal Loss OHEM + Reg. Ortogonalna</td>
+              <td class="metric-highlight">neural-core/precision_ops.py (7/7 zdane)</td>
+            </tr>
+            <tr>
+              <td><strong>Runtime TypeScript</strong></td>
+              <td>Brak natywnego mostka</td>
+              <td class="metric-highlight">Natywny silnik TS (Fazy 1-5 zgodne z blueprintem)</td>
+              <td class="metric-highlight">server/src/neural/ (5/5 testów zdanych)</td>
             </tr>
           </tbody>
         </table>
@@ -713,7 +725,7 @@
               <li>Relacyjny graf faktów rozwiązuje problem zapominania bez modyfikacji wag modelu.</li>
               <li>Integracja REST Wikipedii daje 100% odporności na halucynacje faktograficzne.</li>
               <li>Architektura Dual-Engine pozwala uruchomić aplikację bezkosztowo na GitHub Pages.</li>
-              <li>Wdrożony fizyczny rdzeń KAN + SOM + EWC jako fundament ultra-wydajnej sieci.</li>
+              <li>Wdrożony fizyczny rdzeń KAN + SOM + EWC + SAM + SWA z mostkiem TypeScript.</li>
             </ul>
           </div>
         </div>
@@ -724,7 +736,8 @@
             <ul style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
               <li><strong>Backend:</strong> Fastify + Node 24 <code>node:sqlite</code> (Port 3001)</li>
               <li><strong>Browser-Native:</strong> IndexedDB Cognitive Store + CORS OpenRouter/Wiki</li>
-              <li><strong>Neural Core:</strong> PyTorch KAN + SOM + EWC (6/6 testów jednostkowych zdanych)</li>
+              <li><strong>Neural Core PyTorch:</strong> KAN + SOM + EWC + SAM + SWA (7/7 testów zdanych)</li>
+              <li><strong>Neural Core TypeScript:</strong> LocalTeacher + SOM + KAN + EWC (5/5 testów zdanych)</li>
               <li><strong>Frontend:</strong> React 19 + Tailwind CSS + KAN Neural Lab Visualizer</li>
               <li><strong>Hosting Portfolio:</strong> GitHub Pages (Static SPA)</li>
             </ul>
