@@ -44,6 +44,14 @@ export const SUPPORTED_MODELS: Record<string, ModelPricing> = {
     completionPricePerMillion: 0.32,
     contextLength: 131072,
     recommendedRole: 'balanced'
+  },
+  'openrouter/free': {
+    id: 'openrouter/free',
+    name: 'OpenRouter Free Tier (Darmowy $0.00)',
+    promptPricePerMillion: 0.0,
+    completionPricePerMillion: 0.0,
+    contextLength: 200000,
+    recommendedRole: 'chat'
   }
 };
 

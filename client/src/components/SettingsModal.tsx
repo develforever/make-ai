@@ -142,6 +142,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </option>
               )) || (
                 <>
+                  <option value="openrouter/free">OpenRouter Free Tier (Darmowy $0.00)</option>
                   <option value="google/gemini-2.5-flash">Gemini 2.5 Flash (Zalecany, szybki)</option>
                   <option value="deepseek/deepseek-chat">DeepSeek V3 (Wysoka inteligencja)</option>
                   <option value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Oszczędny)</option>
