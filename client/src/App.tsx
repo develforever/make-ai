@@ -4,11 +4,12 @@ import { ChatWindow } from './components/ChatWindow';
 import { BrainVisualizer } from './components/BrainVisualizer';
 import { BudgetGauge } from './components/BudgetGauge';
 import { SettingsModal } from './components/SettingsModal';
+import { KANVisualizer } from './components/KANVisualizer';
 import type { Message, BudgetStatus, OrchestratorStatus, KeyStatus, ExtractedFact } from './types';
 import { api } from './api/client';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'brain' | 'budget'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'brain' | 'budget' | 'neural'>('chat');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Stany telemetrii i danych
@@ -222,6 +223,12 @@ export const App: React.FC = () => {
               budget={budget}
               onRefresh={refreshAllData}
             />
+          </div>
+        )}
+
+        {activeTab === 'neural' && (
+          <div className="flex-1 py-6">
+            <KANVisualizer />
           </div>
         )}
       </main>

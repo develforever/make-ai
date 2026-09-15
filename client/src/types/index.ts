@@ -57,3 +57,51 @@ export interface OrchestratorStatus {
   supportedModels: ModelOption[];
   logs: any[];
 }
+
+export interface SplineProfile {
+  expert_id: number | string;
+  title: string;
+  x: number[];
+  y: number[];
+  in_features: number;
+  out_features: number;
+  grid_size: number;
+}
+
+export interface SOMPrototype {
+  expert_id: number;
+  name: string;
+  x: number;
+  y: number;
+  norm: number;
+}
+
+export interface KANTelemetry {
+  status: string;
+  architecture: string;
+  activation_function: string;
+  spline_degree: number;
+  grid_size: number;
+  model_summary: {
+    total_parameters: number;
+    trainable_parameters: number;
+    kan_spline_parameters: number;
+    hidden_dimension: number;
+    num_experts: number;
+  };
+  som_topological_map: SOMPrototype[];
+  spline_profiles: SplineProfile[];
+  fisher_diagnostics: {
+    status: string;
+    mean_rigidity: number;
+    max_rigidity: number;
+    min_rigidity: number;
+    histogram: number[];
+  };
+  distillation_metrics: {
+    initial_loss: number;
+    final_loss: number;
+    loss_history: number[];
+  };
+}
+

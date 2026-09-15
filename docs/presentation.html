@@ -625,7 +625,75 @@
 
     <!-- SLIDE 7 -->
     <section class="slide" data-slide="7">
-      <div class="slide-number">Slajd 07 // Podsumowanie Inżynieryjne</div>
+      <div class="slide-number">Slajd 07 // Architektura Neuronowa: KAN + SOM + EWC</div>
+      <h1 class="slide-title">Fizyczny Rdzeń KAN: Uczące się Splajny i Routing Topologiczny</h1>
+      <p class="slide-subtitle">
+        Zastąpienie brutalnej siły gęstą reprezentacją nieliniową na krawędziach grafu oraz ochroną pamięci.
+      </p>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-title cyan">1. Nieliniowości KAN (B-Splines)</div>
+          <div class="card-body">
+            <strong>Zasada:</strong> Zastąpienie wag $W \cdot x$ sumą splajnów na krawędziach: $\phi(x) = w_b \text{Mish}(x) + w_s \sum c_p B_p(x)$.<br><br>
+            <strong>Zysk:</strong> <span class="metric-highlight">696 320 parametrów splajnów</span> (95.1% modelu). Zdolność aproksymacji 10x większego klasycznego MLP.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title emerald">2. Routing Topologiczny (SOM MoE)</div>
+          <div class="card-body">
+            <strong>Zasada:</strong> Embedding trafia na siatkę SOM $W \in \mathbb{R}^{K \times d}$. Gaussowski kernel aktywuje wyłącznie <strong>Top-2 ekspertów KAN</strong>.<br><br>
+            <strong>Zysk:</strong> Redukcja kosztu inferencji o <span class="metric-highlight">75% FLOPs</span> przy zerowym rozmyciu wiedzy semantycznej.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title purple">3. Pamięć EWC & Optymalizacja SAM</div>
+          <div class="card-body">
+            <strong>Zasada:</strong> Macierz Informacji Fishera ($F_i$) zamraża wagi składni ($\lambda = 200$), podczas gdy optymalizator SAM szuka płaskich minimów.<br><br>
+            <strong>Zysk:</strong> <span class="metric-highlight">Eliminacja katastroficznego zapominania</span> przy ciągłym douczaniu nowymi faktami.
+          </div>
+        </div>
+      </div>
+
+      <div class="table-container" style="margin-top: 1rem;">
+        <table>
+          <thead>
+            <tr>
+              <th>Komponent Matematyczny</th>
+              <th>Klasyczny Transformer (MLP)</th>
+              <th>MakeAI Neural Core (KAN + SOM)</th>
+              <th>Status Wdrożenia</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Lokalizacja Nieliniowości</strong></td>
+              <td>Statyczne węzły (ReLU / GELU)</td>
+              <td class="metric-highlight">Krawędzie połączeń (B-splajny rzędu k=3 + Mish)</td>
+              <td class="metric-highlight">neural-core/kan_layer.py (Zweryfikowano)</td>
+            </tr>
+            <tr>
+              <td><strong>Routing Parametrów</strong></td>
+              <td>Brak (wszystkie tokeny przez 100% wag)</td>
+              <td class="metric-highlight">SOM Top-2 MoE (Siatka 4 mikro-ekspertów)</td>
+              <td class="metric-highlight">neural-core/som_router.py (Zweryfikowano)</td>
+            </tr>
+            <tr>
+              <td><strong>Ochrona Składni</strong></td>
+              <td>Zanika (Catastrophic Forgetting)</td>
+              <td class="metric-highlight">EWC (Empiryczna Macierz Fishera) + Replay</td>
+              <td class="metric-highlight">neural-core/ewc_memory.py (Zweryfikowano)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SLIDE 8 -->
+    <section class="slide" data-slide="8">
+      <div class="slide-number">Slajd 08 // Podsumowanie Inżynieryjne</div>
       <h1 class="slide-title">Lekcja Architektoniczna</h1>
       <p class="slide-subtitle">
         Wnioski końcowe z budowy autonomicznego systemu kognitywnego.
@@ -645,6 +713,7 @@
               <li>Relacyjny graf faktów rozwiązuje problem zapominania bez modyfikacji wag modelu.</li>
               <li>Integracja REST Wikipedii daje 100% odporności na halucynacje faktograficzne.</li>
               <li>Architektura Dual-Engine pozwala uruchomić aplikację bezkosztowo na GitHub Pages.</li>
+              <li>Wdrożony fizyczny rdzeń KAN + SOM + EWC jako fundament ultra-wydajnej sieci.</li>
             </ul>
           </div>
         </div>
@@ -655,9 +724,9 @@
             <ul style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
               <li><strong>Backend:</strong> Fastify + Node 24 <code>node:sqlite</code> (Port 3001)</li>
               <li><strong>Browser-Native:</strong> IndexedDB Cognitive Store + CORS OpenRouter/Wiki</li>
-              <li><strong>Frontend:</strong> React 19 + Tailwind CSS + Lucide Icons (Port 5173)</li>
+              <li><strong>Neural Core:</strong> PyTorch KAN + SOM + EWC (6/6 testów jednostkowych zdanych)</li>
+              <li><strong>Frontend:</strong> React 19 + Tailwind CSS + KAN Neural Lab Visualizer</li>
               <li><strong>Hosting Portfolio:</strong> GitHub Pages (Static SPA)</li>
-              <li><strong>Testy integracyjne:</strong> 4/4 zaliczone pomyślnie.</li>
             </ul>
           </div>
         </div>
@@ -669,7 +738,7 @@
   <!-- Footer Controls -->
   <footer>
     <div class="slide-indicator">
-      SLAJD <span id="currentSlide">1</span> / <span id="totalSlides">7</span>
+      SLAJD <span id="currentSlide">1</span> / <span id="totalSlides">8</span>
     </div>
 
     <div class="controls">

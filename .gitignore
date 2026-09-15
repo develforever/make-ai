@@ -38,3 +38,14 @@ Thumbs.db
 # Agent scratch & temporary artifacts
 scratch/
 .system_generated/
+
+# Python & Virtual Environments
+.venv/
+*/.venv/
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.pt
+neural-core/checkpoints/
+

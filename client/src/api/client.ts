@@ -1,4 +1,4 @@
-import type { BudgetStatus, KeyStatus, ExtractedFact, OrchestratorStatus, Message } from '../types';
+import type { BudgetStatus, KeyStatus, ExtractedFact, OrchestratorStatus, Message, KANTelemetry } from '../types';
 import { browserStore } from '../services/storage';
 import { browserCostGuard } from '../services/costGuard';
 import { browserOrchestrator } from '../services/orchestrator';
@@ -287,5 +287,23 @@ export const api = {
 
     // Wykonanie przez wbudowany w przeglądarkę Browser-Native Orchestrator
     await browserOrchestrator.streamChat(message, callbacks);
+  },
+
+  async getKANTelemetry(): Promise<KANTelemetry | null> {
+    // 1. Spróbuj pobrać z backendu Fastify jeśli dostępny
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/neural/telemetry`);
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+
+    // 2. Fallback do statycznego pliku publicznego (GitHub Pages & Local SPA)
+    try {
+      const staticRes = await fetch('./kan_telemetry.json');
+      if (staticRes.ok) return await staticRes.json();
+    } catch {}
+
+    return null;
   }
 };

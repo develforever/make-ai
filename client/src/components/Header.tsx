@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Brain, DollarSign, Settings, Pause, Play, Presentation, Layers } from 'lucide-react';
+import { Sparkles, Brain, DollarSign, Settings, Pause, Play, Presentation, Layers, Cpu } from 'lucide-react';
 import type { BudgetStatus, OrchestratorStatus } from '../types';
 
 interface HeaderProps {
@@ -11,8 +11,8 @@ interface HeaderProps {
   onTogglePause: () => void;
   onOpenSettings: () => void;
   onOpenBrain: () => void;
-  activeTab: 'chat' | 'brain' | 'budget';
-  setActiveTab: (tab: 'chat' | 'brain' | 'budget') => void;
+  activeTab: 'chat' | 'brain' | 'budget' | 'neural';
+  setActiveTab: (tab: 'chat' | 'brain' | 'budget' | 'neural') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -108,6 +108,17 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <DollarSign className="w-4 h-4 text-emerald-400" />
             Budżet ({remaining})
+          </button>
+          <button
+            onClick={() => setActiveTab('neural')}
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 font-medium ${
+              activeTab === 'neural'
+                ? 'bg-cyan-600 text-white shadow'
+                : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+            }`}
+          >
+            <Cpu className="w-4 h-4 text-cyan-400" />
+            Sieć KAN
           </button>
         </div>
 

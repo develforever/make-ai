@@ -37,6 +37,30 @@ async function main() {
     };
   });
 
+  // KAN Neural Core Telemetry
+  fastify.get('/api/neural/telemetry', async (_req, reply) => {
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const candidatePaths = [
+        path.resolve(process.cwd(), 'neural-core', 'kan_telemetry.json'),
+        path.resolve(process.cwd(), '..', 'neural-core', 'kan_telemetry.json'),
+        path.resolve(process.cwd(), 'client', 'public', 'kan_telemetry.json'),
+        path.resolve(process.cwd(), '..', 'client', 'public', 'kan_telemetry.json')
+      ];
+
+      for (const p of candidatePaths) {
+        try {
+          const content = await fs.readFile(p, 'utf-8');
+          return JSON.parse(content);
+        } catch {}
+      }
+      return reply.status(404).send({ error: 'Brak wygenerowanej telemetrii KAN' });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
   const port = DEFAULT_CONFIG.PORT;
   const host = '0.0.0.0';
 
