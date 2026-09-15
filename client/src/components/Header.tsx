@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Brain, DollarSign, Settings, Pause, Play } from 'lucide-react';
+import { Sparkles, Brain, DollarSign, Settings, Pause, Play, Presentation, Layers } from 'lucide-react';
 import type { BudgetStatus, OrchestratorStatus } from '../types';
 
 interface HeaderProps {
@@ -7,6 +7,7 @@ interface HeaderProps {
   budget: BudgetStatus | null;
   orchestrator: OrchestratorStatus | null;
   learnedFactsCount: number;
+  engineMode?: 'backend' | 'browser-native';
   onTogglePause: () => void;
   onOpenSettings: () => void;
   onOpenBrain: () => void;
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   budget,
   orchestrator,
   learnedFactsCount,
+  engineMode = 'browser-native',
   onTogglePause,
   onOpenSettings,
   activeTab,
@@ -49,7 +51,22 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2">
               <h1 className="font-semibold text-slate-100 text-lg tracking-tight">{agentName}</h1>
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-cyan-400 font-mono">
-                {orchestrator?.chatModel ? orchestrator.chatModel.split('/')[1] : 'Gemini 2.0'}
+                {orchestrator?.chatModel ? orchestrator.chatModel.split('/')[1] : 'Gemini 2.5'}
+              </span>
+              <span
+                className={`hidden lg:inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-mono border ${
+                  engineMode === 'backend'
+                    ? 'bg-purple-950/40 border-purple-800/50 text-purple-300'
+                    : 'bg-cyan-950/40 border-cyan-800/50 text-cyan-300'
+                }`}
+                title={
+                  engineMode === 'backend'
+                    ? 'Działa w trybie serwerowym (Node.js + native node:sqlite)'
+                    : 'Działa bezpośrednio w przeglądarce (Local-First IndexedDB Engine)'
+                }
+              >
+                <Layers className="w-3 h-3" />
+                {engineMode === 'backend' ? 'Node 24 Engine' : 'IndexedDB Engine'}
               </span>
             </div>
             <p className="text-xs text-slate-400">
@@ -96,6 +113,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Keynote Presentation Link */}
+          <a
+            href="./presentation.html"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-950/50 border border-indigo-800/50 text-indigo-300 text-xs font-medium hover:bg-indigo-900/60 hover:text-white transition-colors"
+            title="Otwórz interaktywną prezentację architektoniczną w nowej karcie"
+          >
+            <Presentation className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Prezentacja</span>
+          </a>
+
           {/* Pause / Resume Button */}
           <button
             onClick={onTogglePause}

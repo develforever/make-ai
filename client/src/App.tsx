@@ -17,6 +17,7 @@ export const App: React.FC = () => {
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
   const [facts, setFacts] = useState<ExtractedFact[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [engineMode, setEngineMode] = useState<'backend' | 'browser-native'>('browser-native');
 
   // Stany wykonawcze
   const [isStreaming, setIsStreaming] = useState(false);
@@ -25,12 +26,13 @@ export const App: React.FC = () => {
   // Załadowanie wszystkich danych bazowych
   const refreshAllData = useCallback(async () => {
     try {
-      const [bData, oData, kData, mData, cData] = await Promise.all([
+      const [bData, oData, kData, mData, cData, mode] = await Promise.all([
         api.getBudget().catch(() => null),
         api.getOrchestratorStatus().catch(() => null),
         api.getKeyStatus().catch(() => null),
         api.getMemory().catch(() => ({ count: 0, facts: [] })),
-        api.getConversations().catch(() => ({ messages: [] }))
+        api.getConversations().catch(() => ({ messages: [] })),
+        api.getEngineMode().catch(() => 'browser-native' as const)
       ]);
 
       if (bData) setBudget(bData);
@@ -40,6 +42,7 @@ export const App: React.FC = () => {
       if (cData && cData.messages) {
         setMessages(cData.messages);
       }
+      setEngineMode(mode);
     } catch (err) {
       console.error('Błąd odświeżania danych:', err);
     }
@@ -182,6 +185,7 @@ export const App: React.FC = () => {
         budget={budget}
         orchestrator={orchestrator}
         learnedFactsCount={facts.length}
+        engineMode={engineMode}
         onTogglePause={handleTogglePause}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenBrain={() => setActiveTab('brain')}
