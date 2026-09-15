@@ -13,6 +13,11 @@ class AppDatabase {
     }
 
     this.db = new DatabaseSync(DEFAULT_CONFIG.DB_PATH);
+    this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      PRAGMA cache_size = -64000;
+    `);
     this.initSchema();
   }
 
@@ -55,6 +60,10 @@ class AppDatabase {
         is_active INTEGER DEFAULT 1
       );
 
+      CREATE INDEX IF NOT EXISTS idx_facts_active_cat ON learned_facts (is_active, category);
+      CREATE INDEX IF NOT EXISTS idx_facts_subject ON learned_facts (subject);
+      CREATE INDEX IF NOT EXISTS idx_conv_timestamp ON conversations (timestamp);
+
       CREATE TABLE IF NOT EXISTS wiki_cache (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         query TEXT UNIQUE NOT NULL,
@@ -63,6 +72,8 @@ class AppDatabase {
         url TEXT NOT NULL,
         fetched_at TEXT NOT NULL
       );
+
+      CREATE INDEX IF NOT EXISTS idx_wiki_query ON wiki_cache (query);
 
       CREATE TABLE IF NOT EXISTS orchestrator_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -177,6 +188,12 @@ class AppDatabase {
   }
 
   public getActiveLearnedFacts(limit: number = 100): any[] {
+    return this.db.prepare(`
+      SELECT * FROM learned_facts WHERE is_active = 1 ORDER BY id DESC LIMIT ?
+    `).all(limit);
+  }
+
+  public getAllActiveFacts(limit: number = 500): any[] {
     return this.db.prepare(`
       SELECT * FROM learned_facts WHERE is_active = 1 ORDER BY id DESC LIMIT ?
     `).all(limit);

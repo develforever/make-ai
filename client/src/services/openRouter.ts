@@ -13,6 +13,7 @@ export interface StreamYield {
     promptTokens: number;
     completionTokens: number;
     costUsd: number;
+    model?: string;
   };
 }
 

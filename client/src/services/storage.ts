@@ -55,7 +55,9 @@ export class BrowserCognitiveStore {
       { key: 'chat_model', value: 'openrouter/free' },
       { key: 'extraction_model', value: 'google/gemini-2.5-flash-lite' },
       { key: 'orchestrator_paused', value: 'false' },
-      { key: 'sandbox_mode', value: 'false' }
+      { key: 'sandbox_mode', value: 'false' },
+      { key: 'use_local_ollama', value: 'false' },
+      { key: 'local_ollama_url', value: 'http://localhost:11434' }
     ];
 
     const tx = db.transaction('settings', 'readwrite');

@@ -111,3 +111,43 @@ class StochasticWeightAveraging:
             for name, param in self.model.named_parameters():
                 if name in self.swa_weights:
                     param.copy_(self.swa_weights[name])
+
+
+class CurriculumScheduler:
+    """
+    Curriculum Learning:
+    Gradually shifts training data complexity from foundational syntax (low entropy, simple)
+    to high-ambiguity conversational reasoning (high entropy, difficult) across training steps.
+    """
+
+    def __init__(self, total_steps: int, warmup_ratio: float = 0.3):
+        self.total_steps = total_steps
+        self.warmup_steps = int(total_steps * warmup_ratio)
+
+    def get_stage(self, current_step: int) -> dict:
+        progress = current_step / max(1, self.total_steps)
+        if current_step < self.warmup_steps:
+            return {
+                "stage": 1,
+                "name": "Foundational Syntax (Low Entropy)",
+                "temp": 2.5,  # Smoother dark knowledge
+                "ohem_ratio": 0.5,  # Broad token learning
+                "alpha_distill": 0.8
+            }
+        elif progress < 0.7:
+            return {
+                "stage": 2,
+                "name": "Intermediate Dialogue Patterns",
+                "temp": 2.0,
+                "ohem_ratio": 0.35,
+                "alpha_distill": 0.6
+            }
+        else:
+            return {
+                "stage": 3,
+                "name": "Hard Edge Cases & Fact Retention",
+                "temp": 1.5,
+                "ohem_ratio": 0.25,  # Focus on top 25% hardest tokens
+                "alpha_distill": 0.4
+            }
+

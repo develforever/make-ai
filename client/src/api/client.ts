@@ -187,7 +187,13 @@ export const api = {
     return { success: true, isPaused };
   },
 
-  async updateSettings(settings: { agentName?: string; chatModel?: string; extractionModel?: string }): Promise<any> {
+  async updateSettings(settings: {
+    agentName?: string;
+    chatModel?: string;
+    extractionModel?: string;
+    useLocalOllama?: boolean;
+    localOllamaUrl?: string;
+  }): Promise<any> {
     if (await checkBackend()) {
       try {
         const res = await fetch(`${API_BASE}/orchestrator/settings`, {

@@ -18,6 +18,22 @@ export interface TrainingStepTelemetry {
   ewcPenalty: number;
   bmuExpert: number;
   teacherOnline: boolean;
+  curriculumStage: string;
+}
+
+export class CurriculumSchedulerTS {
+  constructor(private readonly totalSteps: number, private readonly warmupRatio: number = 0.3) {}
+
+  public getStage(currentStep: number): { stage: number; name: string; temperature: number; alphaDistill: number } {
+    const progress = currentStep / Math.max(1, this.totalSteps);
+    if (currentStep < this.totalSteps * this.warmupRatio) {
+      return { stage: 1, name: 'Foundational Syntax (Low Entropy)', temperature: 2.5, alphaDistill: 0.8 };
+    } else if (progress < 0.7) {
+      return { stage: 2, name: 'Intermediate Dialogue Patterns', temperature: 2.0, alphaDistill: 0.6 };
+    } else {
+      return { stage: 3, name: 'Hard Edge Cases & Fact Retention', temperature: 1.5, alphaDistill: 0.4 };
+    }
+  }
 }
 
 export class TrainingLoop {
@@ -47,11 +63,14 @@ export class TrainingLoop {
   public async step(batch: string[]): Promise<TrainingStepTelemetry[]> {
     const results: TrainingStepTelemetry[] = [];
     const teacherOnline = await this.teacher.isAvailable();
+    const scheduler = new CurriculumSchedulerTS(batch.length, 0.3);
 
     for (let s = 0; s < batch.length; s++) {
       const prompt = batch[s];
-      // 1. Get soft targets from teacher
-      const softTargets = await this.teacher.getSoftTargets(prompt, 64);
+      const stage = scheduler.getStage(s);
+
+      // 1. Get soft targets from teacher adapted to curriculum temperature
+      const softTargets = await this.teacher.getSoftTargets(prompt, 64, stage.temperature);
 
       // 2. Synthetic token embedding for router
       const tokenVec = new Float32Array(32);
@@ -106,7 +125,8 @@ export class TrainingLoop {
         klLoss,
         ewcPenalty,
         bmuExpert: bmu,
-        teacherOnline
+        teacherOnline,
+        curriculumStage: stage.name
       });
     }
 

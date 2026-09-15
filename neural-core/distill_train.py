@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from architecture import MakeAIKANConversationalModel
 from sam_optimizer import SAM
 from ewc_memory import EWC, ReplayBuffer
-from precision_ops import FocalLossOHEM, compute_orthogonal_regularization, StochasticWeightAveraging
+from precision_ops import FocalLossOHEM, compute_orthogonal_regularization, StochasticWeightAveraging, CurriculumScheduler
 from teacher_client import OllamaTeacherClient
 
 
@@ -84,15 +84,25 @@ def run_training_simulation(
     replay_buffer = ReplayBuffer(capacity=50)
     ewc = EWC(model, ewc_lambda=200.0)
 
+    # Curriculum Learning Scheduler
+    curriculum = CurriculumScheduler(total_steps=num_steps, warmup_ratio=0.3)
+
     history_losses = []
+    curriculum_stages = []
 
     for step in range(num_steps):
+        stage_info = curriculum.get_stage(step)
+        # Dynamically set temperature and ohem ratio per curriculum
+        criterion.temperature = stage_info["temp"]
+        criterion.focal.ohem_ratio = stage_info["ohem_ratio"]
+        criterion.alpha = stage_info["alpha_distill"]
+
         inputs = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
         targets = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
-        # Teacher soft targets
+        # Teacher soft targets with curriculum temperature
         with torch.no_grad():
-            teacher_logits = teacher.generate_soft_targets(batch_size, seq_len, vocab_size, device=device)
+            teacher_logits = teacher.generate_soft_targets(batch_size, seq_len, vocab_size, temperature=stage_info["temp"], device=device)
 
         # First forward-backward pass (Ascent step in SAM)
         model.zero_grad()
@@ -112,6 +122,7 @@ def run_training_simulation(
             swa.update()
 
         history_losses.append(float(loss.item()))
+        curriculum_stages.append(stage_info["name"])
         replay_buffer.push({"input": inputs.cpu(), "target": targets.cpu()})
 
     # Apply SWA weights to model
@@ -147,7 +158,8 @@ def run_training_simulation(
         "fisher_diagnostics": fisher_stats,
         "model_summary": model.count_parameters(),
         "swa_models_accumulated": swa.n_models,
-        "teacher_online": teacher.is_connected
+        "teacher_online": teacher.is_connected,
+        "curriculum_stages": curriculum_stages
     }
 
 

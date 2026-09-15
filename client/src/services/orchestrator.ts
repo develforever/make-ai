@@ -1,9 +1,7 @@
 import { browserStore } from './storage';
 import { browserWikipedia, type WikiSummaryResult } from './wikipedia';
-import { browserOpenRouter } from './openRouter';
 import { browserPersonaWorker } from './personaWorker';
 import { browserMemoryWorker } from './memoryWorker';
-import { browserSandbox } from './sandbox';
 import { CLIENT_SUPPORTED_MODELS, DEFAULT_CLIENT_CONFIG } from './config';
 import type { ExtractedFact, OrchestratorStatus } from '../types';
 
@@ -43,10 +41,18 @@ export class BrowserOrchestrator {
     agentName?: string;
     chatModel?: string;
     extractionModel?: string;
+    useLocalOllama?: boolean;
+    localOllamaUrl?: string;
   }): Promise<void> {
     if (settings.agentName) await browserStore.setSetting('agent_name', settings.agentName);
     if (settings.chatModel) await browserStore.setSetting('chat_model', settings.chatModel);
     if (settings.extractionModel) await browserStore.setSetting('extraction_model', settings.extractionModel);
+    if (settings.useLocalOllama !== undefined) {
+      await browserStore.setSetting('use_local_ollama', settings.useLocalOllama ? 'true' : 'false');
+    }
+    if (settings.localOllamaUrl) {
+      await browserStore.setSetting('local_ollama_url', settings.localOllamaUrl);
+    }
 
     await browserStore.logOrchestrator('Orchestrator', 'settings_update', 'success', JSON.stringify(settings));
   }
@@ -118,51 +124,29 @@ export class BrowserOrchestrator {
         }
       }
 
-      // 3. Sprawdź dostępność klucza API
-      const apiKey = await browserOpenRouter.getApiKey();
+      // 3. Wnioskowanie i streaming odpowiedzi przez PersonaWorker (Ollama / OpenRouter / Sandbox)
       let fullReply = '';
+      const stream = browserPersonaWorker.generateResponseStream({
+        userMessage,
+        wikiContext: wikiResult
+      });
 
-      if (apiKey) {
-        // Tryb Live OpenRouter
-        const promptMessages = await browserPersonaWorker.buildPrompt({
-          userMessage,
-          wikiContext: wikiResult
-        });
-
-        const chatModel = (await browserStore.getSetting('chat_model')) || DEFAULT_CLIENT_CONFIG.DEFAULT_CHAT_MODEL;
-
-        const stream = browserOpenRouter.streamChatCompletion(
-          promptMessages,
-          chatModel,
-          'chat_persona_generation',
-          0.7
-        );
-
-        for await (const chunk of stream) {
-          if (chunk.type === 'delta' && chunk.delta) {
-            fullReply += chunk.delta;
-            callbacks.onDelta?.(chunk.delta);
-          } else if (chunk.type === 'usage' && chunk.usage) {
-            callbacks.onUsage?.(chunk.usage);
-          }
-        }
-      } else {
-        // Tryb Demonstracyjny / Sandbox
-        const stream = browserSandbox.streamSandboxResponse(userMessage, wikiResult);
-        for await (const chunk of stream) {
-          if (chunk.type === 'delta' && chunk.delta) {
-            fullReply += chunk.delta;
-            callbacks.onDelta?.(chunk.delta);
-          } else if (chunk.type === 'usage' && chunk.usage) {
-            callbacks.onUsage?.(chunk.usage);
-          }
+      for await (const chunk of stream) {
+        if (chunk.type === 'delta' && chunk.delta) {
+          fullReply += chunk.delta;
+          callbacks.onDelta?.(chunk.delta);
+        } else if (chunk.type === 'usage' && chunk.usage) {
+          callbacks.onUsage?.(chunk.usage);
         }
       }
 
-      // 4. Zapisz odpowiedź asystenta w IndexedDB
+      // 4. Zapisz odpowiedź asystenta w IndexedDB z właściwym modelem (Ollama / OpenRouter / Sandbox)
       const meta = wikiResult?.found ? JSON.stringify({ wiki: wikiResult }) : undefined;
-      const chatModel = (await browserStore.getSetting('chat_model')) || DEFAULT_CLIENT_CONFIG.DEFAULT_CHAT_MODEL;
-      const assistantMsgId = await browserStore.saveMessage('assistant', fullReply, chatModel, meta);
+      const modelUsed =
+        browserPersonaWorker.getLastUsedModel() ||
+        (await browserStore.getSetting('chat_model')) ||
+        DEFAULT_CLIENT_CONFIG.DEFAULT_CHAT_MODEL;
+      const assistantMsgId = await browserStore.saveMessage('assistant', fullReply, modelUsed, meta);
 
       // 5. Asynchroniczny Memory Worker w tle
       browserMemoryWorker

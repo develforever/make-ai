@@ -3,6 +3,8 @@ import { openRouterClient, ChatMessage } from '../services/openRouter.js';
 import { WikiSummaryResult } from '../services/wikipedia.js';
 import { DEFAULT_CONFIG } from '../config.js';
 import { costGuard } from '../services/costGuard.js';
+import { memoryRanker, LearnedFact } from '../services/memoryRanker.js';
+import { memoryWorker } from './memoryWorker.js';
 
 export interface PersonaGenerationInput {
   userMessage: string;
@@ -16,7 +18,22 @@ export class PersonaWorker {
    */
   public buildPrompt(input: PersonaGenerationInput): ChatMessage[] {
     const agentName = database.getSetting('agent_name') || DEFAULT_CONFIG.AGENT_NAME;
-    const learnedFacts = database.getActiveLearnedFacts(40);
+    
+    // Semantyczna selekcja pamięci: łączymy fakty z bazy z faktami ulotnymi w kolejce
+    const allStoredFacts = database.getAllActiveFacts(300) as LearnedFact[];
+    const transientFacts: LearnedFact[] = memoryWorker.getTransientFacts().map((f, idx) => ({
+      id: 990000 + idx,
+      category: f.category,
+      subject: f.subject,
+      predicate: f.predicate,
+      object: f.object,
+      confidence: f.confidence,
+      created_at: new Date().toISOString(),
+      is_active: 1
+    }));
+    const combinedFacts = [...transientFacts, ...allStoredFacts];
+    const learnedFacts = memoryRanker.rankFacts(input.userMessage, combinedFacts, 15);
+
     const history = database.getRecentMessages(input.historyLimit || 12);
     const budget = costGuard.getStatus();
     const isPaused = database.getSetting('orchestrator_paused') === 'true';
