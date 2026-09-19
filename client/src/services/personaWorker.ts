@@ -7,15 +7,17 @@ import { DEFAULT_CLIENT_CONFIG } from './config';
 
 export interface BrowserPersonaGenerationInput {
   userMessage: string;
+  sessionId?: string;
   wikiContext?: WikiSummaryResult | null;
   historyLimit?: number;
+  crossSessionContexts?: string[];
 }
 
 export class BrowserPersonaWorker {
   public async buildPrompt(input: BrowserPersonaGenerationInput): Promise<ChatMessage[]> {
     const agentName = (await browserStore.getSetting('agent_name')) || DEFAULT_CLIENT_CONFIG.AGENT_NAME;
     const learnedFacts = await browserStore.getActiveLearnedFacts(40);
-    const history = await browserStore.getRecentMessages(input.historyLimit || 12);
+    const history = await browserStore.getRecentMessages(input.historyLimit || 12, input.sessionId || 'default');
     const budget = await browserCostGuard.getStatus();
     const isPaused = (await browserStore.getSetting('orchestrator_paused')) === 'true';
 
@@ -65,6 +67,11 @@ Temat: "${input.wikiContext.title}"
 Treść: "${input.wikiContext.summary}"
 Źródło: ${input.wikiContext.url}
 (Użyj tych zweryfikowanych faktów w swojej wypowiedzi, zachowując swój własny, naturalny styl).`;
+    }
+
+    if (input.crossSessionContexts && input.crossSessionContexts.length > 0) {
+      systemInstruction += `\n\n### POWIĄZANY KONTEKST Z INNYCH SESJI (ODWOŁANIA UŻYTKOWNIKA):
+${input.crossSessionContexts.join('\n\n')}`;
     }
 
     const messages: ChatMessage[] = [

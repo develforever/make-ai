@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "test": "tsx src/tests/engine.test.ts && tsx src/tests/queue_concurrency.test.ts && tsx src/neural/test_ts_engine.ts",
+    "test": "tsx src/tests/engine.test.ts && tsx src/tests/queue_concurrency.test.ts && tsx src/neural/test_ts_engine.ts && tsx src/tests/session_management.test.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },

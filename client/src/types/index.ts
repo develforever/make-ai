@@ -1,5 +1,6 @@
 export interface Message {
   id?: number;
+  session_id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: string;
@@ -11,6 +12,40 @@ export interface Message {
     thumbnailUrl?: string;
   };
   learnedFacts?: ExtractedFact[];
+}
+
+export interface ChatFolder {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at?: string;
+  color?: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  folder_id: string | null;
+  is_pinned: boolean;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+  summary?: string | null;
+  message_count?: number;
+  last_message_preview?: string;
+}
+
+export interface SearchMatch {
+  messageId?: number;
+  content: string;
+  role: string;
+  timestamp: string;
+  snippet: string;
+}
+
+export interface SearchResult {
+  session: ChatSession;
+  matches: SearchMatch[];
 }
 
 export interface ExtractedFact {

@@ -1,17 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Send, Sparkles, Brain, BookOpen, ExternalLink, Loader2, AlertTriangle, ShieldCheck } from 'lucide-react';
-import type { Message } from '../types';
+import { Send, Sparkles, Brain, BookOpen, ExternalLink, Loader2, AlertTriangle, ShieldCheck, AtSign, Link, X } from 'lucide-react';
+import type { Message, ChatSession } from '../types';
+import { SessionMentionPopover } from './Chat/SessionMentionPopover';
 
 interface ChatWindowProps {
   messages: Message[];
   isStreaming: boolean;
   isLearning: boolean;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, referencedSessionIds?: string[]) => void;
   agentName: string;
   hasApiKey: boolean;
   onOpenSettings: () => void;
+  sessions?: ChatSession[];
+  activeSessionId?: string;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -22,8 +25,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   agentName,
   hasApiKey,
   onOpenSettings,
+  sessions = [],
+  activeSessionId = 'default'
 }) => {
   const [inputText, setInputText] = useState('');
+  const [attachedSessions, setAttachedSessions] = useState<ChatSession[]>([]);
+  const [mentionPopoverOpen, setMentionPopoverOpen] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -38,24 +46,52 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || isStreaming) return;
-    onSendMessage(inputText.trim());
+    const refIds = attachedSessions.map((s) => s.id);
+    onSendMessage(inputText.trim(), refIds.length > 0 ? refIds : undefined);
     setInputText('');
+    setAttachedSessions([]);
+    setMentionPopoverOpen(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !mentionPopoverOpen) {
       e.preventDefault();
       handleSubmit(e);
     }
   };
 
   const handleInputResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputText(e.target.value);
+    const val = e.target.value;
+    setInputText(val);
     e.target.style.height = 'auto';
     e.target.style.height = `${Math.min(160, e.target.scrollHeight)}px`;
+
+    // Wykryj '@' do otwarcia popovera
+    const lastAtIdx = val.lastIndexOf('@');
+    if (lastAtIdx !== -1 && lastAtIdx >= val.length - 20) {
+      const query = val.slice(lastAtIdx + 1);
+      if (!query.includes(' ')) {
+        setMentionFilter(query);
+        setMentionPopoverOpen(true);
+        return;
+      }
+    }
+    setMentionPopoverOpen(false);
+  };
+
+  const handleSelectMention = (session: ChatSession) => {
+    if (!attachedSessions.some((s) => s.id === session.id)) {
+      setAttachedSessions((prev) => [...prev, session]);
+    }
+    const lastAtIdx = inputText.lastIndexOf('@');
+    if (lastAtIdx !== -1) {
+      const before = inputText.slice(0, lastAtIdx);
+      setInputText(`${before}[[session:${session.id}|${session.title}]] `);
+    }
+    setMentionPopoverOpen(false);
   };
 
   const samplePrompts = [
@@ -186,7 +222,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                   {/* Message Content */}
                   <div className="prose prose-invert prose-sm max-w-none break-words">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
+                      {msg.content.replace(/\[\[session:([a-zA-Z0-9_-]+)\|([^\]]+)\]\]/g, '📎 **[$2]**')}
                     </ReactMarkdown>
                   </div>
 
@@ -249,8 +285,57 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       </div>
 
       {/* Input Form */}
-      <div className="p-4 border-t border-slate-800 bg-slate-900/90 backdrop-blur">
+      <div className="p-4 border-t border-slate-800 bg-slate-900/90 backdrop-blur relative">
+        {/* Attached Cross-Session Reference Badges */}
+        {attachedSessions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2 px-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400 flex items-center gap-1">
+              <Link className="w-3 h-3" />
+              Połączone sesje:
+            </span>
+            {attachedSessions.map((s) => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs shadow-sm"
+              >
+                <span className="truncate max-w-[140px]">{s.title}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachedSessions((prev) => prev.filter((item) => item.id !== s.id))}
+                  className="p-0.5 hover:text-white rounded-full"
+                  title="Odłącz sesję"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Popover */}
+        <SessionMentionPopover
+          isOpen={mentionPopoverOpen}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          filterText={mentionFilter}
+          onSelect={handleSelectMention}
+          onClose={() => setMentionPopoverOpen(false)}
+        />
+
         <form onSubmit={handleSubmit} className="relative flex items-end gap-2">
+          <button
+            type="button"
+            onClick={() => setMentionPopoverOpen(!mentionPopoverOpen)}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+              attachedSessions.length > 0 || mentionPopoverOpen
+                ? 'bg-cyan-950 text-cyan-300 border-cyan-500/60 shadow-sm'
+                : 'bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-slate-200 border-slate-700'
+            }`}
+            title="Odwołaj się do innej rozmowy (@)"
+          >
+            <AtSign className="w-4 h-4" />
+          </button>
+
           <textarea
             ref={textareaRef}
             rows={1}
@@ -261,15 +346,15 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             placeholder={
               !hasApiKey
                 ? 'Wprowadź klucz API w ustawieniach, aby rozmawiać...'
-                : `Napisz do ${agentName}... (Enter wysyła, Shift+Enter nowa linia)`
+                : `Napisz do ${agentName}... (Wpisz @ aby połączyć inną rozmowę)`
             }
-            className="flex-1 py-3 pl-4 pr-12 bg-slate-800 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none min-h-[46px] max-h-40 leading-normal"
+            className="flex-1 py-3 pl-4 pr-4 bg-slate-800 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none min-h-[46px] max-h-40 leading-normal"
           />
 
           <button
             type="submit"
             disabled={!inputText.trim() || !hasApiKey || isStreaming}
-            className="w-11 h-11 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:hover:bg-cyan-600 text-white flex items-center justify-center shrink-0 transition-colors shadow-lg shadow-cyan-900/40"
+            className="w-11 h-11 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 disabled:hover:bg-cyan-600 text-white flex items-center justify-center shrink-0 transition-colors shadow-lg shadow-cyan-900/40 cursor-pointer"
           >
             {isStreaming ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -281,7 +366,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
 
         <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 px-1">
           <span>
-            {agentName} posiada wiedzę z Wikipedii, własną tożsamość i pamięć kognitywną.
+            {agentName} posiada wiedzę z Wikipedii, pamięć kognitywną i transfer wiedzy między sesjami.
           </span>
           <span className="hidden sm:inline font-mono text-emerald-500">
             OpenRouter Safe Guard $2.00

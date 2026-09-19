@@ -88,7 +88,9 @@ export class BrowserOrchestrator {
       onUsage?: (usage: any) => void;
       onError?: (error: string) => void;
       onDone?: () => void;
-    }
+    },
+    sessionId: string = 'default',
+    explicitReferencedSessionIds: string[] = []
   ): Promise<void> {
     if (this.isProcessing) {
       callbacks.onError?.('Orkiestrator przetwarza już inne zapytanie.');
@@ -99,10 +101,49 @@ export class BrowserOrchestrator {
     this.isProcessing = true;
 
     try {
-      // 1. Zapisz wiadomość użytkownika w IndexedDB
-      await browserStore.saveMessage('user', userMessage);
+      // 1. Wykrywanie i rozwiązywanie odwołań do innych sesji (Cross-Session Context)
+      const wikiRegex = /\[\[session:([a-zA-Z0-9_-]+)(?:\|[^\]]+)?\]\]/g;
+      const atColonRegex = /@session:([a-zA-Z0-9_-]+)/g;
+      const atDirectRegex = /@(session_[a-zA-Z0-9_-]+)/g;
+      const refSet = new Set<string>(explicitReferencedSessionIds);
+      let match: RegExpExecArray | null;
+      while ((match = wikiRegex.exec(userMessage)) !== null) refSet.add(match[1]);
+      while ((match = atColonRegex.exec(userMessage)) !== null) refSet.add(match[1]);
+      while ((match = atDirectRegex.exec(userMessage)) !== null) refSet.add(match[1]);
 
-      // 2. Wikipedia Worker
+      const crossSessionContexts: string[] = [];
+      for (const rId of refSet) {
+        if (rId === sessionId) continue;
+        const s = await browserStore.getSession(rId);
+        if (!s) continue;
+        const recent = await browserStore.getRecentMessages(6, rId);
+        if (recent.length === 0) continue;
+        const lines = [
+          `[ODWOŁANIE DO POWIĄZANEJ SESJI: "${s.title}"]`,
+          s.summary ? `Streszczenie: ${s.summary}` : '',
+          `Początek dyskusji: ${recent[0].content.slice(0, 180)}`,
+          recent.length > 1 ? `Ostatnie ustalenia: ${recent[recent.length - 1].content.slice(0, 220)}` : ''
+        ].filter(Boolean);
+        crossSessionContexts.push(lines.join('\n'));
+      }
+
+      // 2. Automatyczne nadanie tytułu heurystycznego przy pierwszej wiadomości
+      const currentSession = await browserStore.getSession(sessionId);
+      if (currentSession && (currentSession.title === 'Nowa rozmowa' || !currentSession.title)) {
+        const clean = userMessage
+          .replace(/^[#>\s*_-]+/, '')
+          .replace(/^(?:proszę|powiedz mi|jak|czym jest|kim jest|co to jest|napisz|wyjaśnij|hej|cześć|witaj)\s+/i, '')
+          .trim();
+        const cap = clean.charAt(0).toUpperCase() + clean.slice(1);
+        const firstLine = cap.split('\n')[0].trim();
+        const heuristicTitle = firstLine.length <= 45 ? firstLine : firstLine.slice(0, 42).trim() + '...';
+        await browserStore.updateSession(sessionId, { title: heuristicTitle });
+      }
+
+      // 3. Zapisz wiadomość użytkownika w IndexedDB
+      await browserStore.saveMessage('user', userMessage, undefined, undefined, sessionId);
+
+      // 4. Wikipedia Worker
       let wikiResult: WikiSummaryResult | null = null;
       const wikiTerm = this.extractWikiSearchTerm(userMessage);
       if (wikiTerm) {
@@ -124,11 +165,13 @@ export class BrowserOrchestrator {
         }
       }
 
-      // 3. Wnioskowanie i streaming odpowiedzi przez PersonaWorker (Ollama / OpenRouter / Sandbox)
+      // 5. Wnioskowanie i streaming odpowiedzi przez PersonaWorker (Ollama / OpenRouter / Sandbox)
       let fullReply = '';
       const stream = browserPersonaWorker.generateResponseStream({
         userMessage,
-        wikiContext: wikiResult
+        sessionId,
+        wikiContext: wikiResult,
+        crossSessionContexts
       });
 
       for await (const chunk of stream) {
@@ -140,15 +183,15 @@ export class BrowserOrchestrator {
         }
       }
 
-      // 4. Zapisz odpowiedź asystenta w IndexedDB z właściwym modelem (Ollama / OpenRouter / Sandbox)
+      // 6. Zapisz odpowiedź asystenta w IndexedDB z właściwym modelem (Ollama / OpenRouter / Sandbox)
       const meta = wikiResult?.found ? JSON.stringify({ wiki: wikiResult }) : undefined;
       const modelUsed =
         browserPersonaWorker.getLastUsedModel() ||
         (await browserStore.getSetting('chat_model')) ||
         DEFAULT_CLIENT_CONFIG.DEFAULT_CHAT_MODEL;
-      const assistantMsgId = await browserStore.saveMessage('assistant', fullReply, modelUsed, meta);
+      const assistantMsgId = await browserStore.saveMessage('assistant', fullReply, modelUsed, meta, sessionId);
 
-      // 5. Asynchroniczny Memory Worker w tle
+      // 7. Asynchroniczny Memory Worker w tle
       browserMemoryWorker
         .extractAndLearn(userMessage, fullReply, assistantMsgId)
         .then((learnedFacts) => {

@@ -4,11 +4,13 @@ import { openRouterClient } from '../services/openRouter.js';
 
 interface ChatRequestBody {
   message: string;
+  sessionId?: string;
+  referencedSessionIds?: string[];
 }
 
 export async function chatRoutes(fastify: FastifyInstance) {
   fastify.post('/api/chat', async (request: FastifyRequest<{ Body: ChatRequestBody }>, reply: FastifyReply) => {
-    const { message } = request.body || {};
+    const { message, sessionId = 'default', referencedSessionIds = [] } = request.body || {};
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return reply.status(400).send({ error: 'Wiadomość nie może być pusta' });
@@ -24,7 +26,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
     reply.hijack();
 
     try {
-      const turn = await orchestrator.handleUserMessage(message);
+      const turn = await orchestrator.handleUserMessage(message, sessionId, referencedSessionIds);
 
       // Konfiguracja nagłówków Server-Sent Events (SSE)
       reply.raw.writeHead(200, {

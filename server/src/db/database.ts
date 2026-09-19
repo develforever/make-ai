@@ -83,7 +83,51 @@ class AppDatabase {
         status TEXT NOT NULL,
         details TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS chat_folders (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        color TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        folder_id TEXT,
+        is_pinned INTEGER DEFAULT 0,
+        is_archived INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        summary TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sessions_folder ON chat_sessions (folder_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON chat_sessions (is_pinned, is_archived);
     `);
+
+    // Migracja tabeli conversations: dodanie session_id jeśli nie istnieje
+    try {
+      this.db.exec(`ALTER TABLE conversations ADD COLUMN session_id TEXT DEFAULT 'default'`);
+    } catch {
+      // Kolumna już istnieje
+    }
+
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_conv_session_time ON conversations (session_id, timestamp);
+    `);
+
+    // Gwarancja istnienia domyślnej sesji bazowej
+    const defaultSession = this.db.prepare('SELECT id FROM chat_sessions WHERE id = ?').get('default');
+    if (!defaultSession) {
+      const now = new Date().toISOString();
+      this.db.prepare(`
+        INSERT INTO chat_sessions (id, title, folder_id, is_pinned, is_archived, created_at, updated_at)
+        VALUES ('default', 'Główna sesja', NULL, 0, 0, ?, ?)
+      `).run(now, now);
+    }
+    this.db.exec(`UPDATE conversations SET session_id = 'default' WHERE session_id IS NULL OR session_id = ''`);
 
     // Inicjalizacja domyślnych ustawień jeśli nie istnieją
     const checkSetting = this.db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -148,25 +192,229 @@ class AppDatabase {
     `).all(limit);
   }
 
-  // Conversations
-  public saveMessage(role: string, content: string, tokens: number = 0, model?: string, metadata?: string): number {
+  // Folders
+  public getFolders(): any[] {
+    return this.db.prepare('SELECT * FROM chat_folders ORDER BY name ASC').all();
+  }
+
+  public saveFolder(name: string, color?: string, id?: string): string {
+    const folderId = id || `folder_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO chat_folders (id, name, created_at, updated_at, color)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at, color = excluded.color
+    `).run(folderId, name, now, now, color || null);
+    return folderId;
+  }
+
+  public deleteFolder(id: string): void {
+    this.db.prepare('UPDATE chat_sessions SET folder_id = NULL WHERE folder_id = ?').run(id);
+    this.db.prepare('DELETE FROM chat_folders WHERE id = ?').run(id);
+  }
+
+  // Sessions
+  public getSessions(options?: { includeArchived?: boolean; folderId?: string | null }): any[] {
+    let sql = `
+      SELECT 
+        s.*,
+        COUNT(c.id) as message_count,
+        (
+          SELECT content FROM conversations 
+          WHERE session_id = s.id 
+          ORDER BY id DESC LIMIT 1
+        ) as last_message_preview
+      FROM chat_sessions s
+      LEFT JOIN conversations c ON c.session_id = s.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (!options?.includeArchived) {
+      sql += ' AND s.is_archived = 0';
+    }
+
+    if (options?.folderId !== undefined) {
+      if (options.folderId === null) {
+        sql += ' AND s.folder_id IS NULL';
+      } else {
+        sql += ' AND s.folder_id = ?';
+        params.push(options.folderId);
+      }
+    }
+
+    sql += ' GROUP BY s.id ORDER BY s.is_pinned DESC, s.updated_at DESC';
+    return this.db.prepare(sql).all(...params);
+  }
+
+  public getSession(id: string): any {
+    return this.db.prepare(`
+      SELECT 
+        s.*,
+        COUNT(c.id) as message_count
+      FROM chat_sessions s
+      LEFT JOIN conversations c ON c.session_id = s.id
+      WHERE s.id = ?
+      GROUP BY s.id
+    `).get(id);
+  }
+
+  public createSession(title?: string, folderId?: string | null, id?: string): string {
+    const sessionId = id || `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    const sessionTitle = title || 'Nowa rozmowa';
+    this.db.prepare(`
+      INSERT INTO chat_sessions (id, title, folder_id, is_pinned, is_archived, created_at, updated_at)
+      VALUES (?, ?, ?, 0, 0, ?, ?)
+    `).run(sessionId, sessionTitle, folderId || null, now, now);
+    return sessionId;
+  }
+
+  public updateSession(
+    id: string,
+    updates: {
+      title?: string;
+      folder_id?: string | null;
+      is_pinned?: boolean | number;
+      is_archived?: boolean | number;
+      summary?: string;
+    }
+  ): void {
+    const now = new Date().toISOString();
+    const current = this.getSession(id);
+    if (!current) return;
+
+    const title = updates.title !== undefined ? updates.title : current.title;
+    const folderId = updates.folder_id !== undefined ? updates.folder_id : current.folder_id;
+    const isPinned = updates.is_pinned !== undefined ? (updates.is_pinned ? 1 : 0) : current.is_pinned;
+    const isArchived = updates.is_archived !== undefined ? (updates.is_archived ? 1 : 0) : current.is_archived;
+    const summary = updates.summary !== undefined ? updates.summary : current.summary;
+
+    this.db.prepare(`
+      UPDATE chat_sessions 
+      SET title = ?, folder_id = ?, is_pinned = ?, is_archived = ?, summary = ?, updated_at = ?
+      WHERE id = ?
+    `).run(title, folderId, isPinned, isArchived, summary, now, id);
+  }
+
+  public deleteSession(id: string): void {
+    this.db.prepare('DELETE FROM conversations WHERE session_id = ?').run(id);
+    this.db.prepare('DELETE FROM chat_sessions WHERE id = ?').run(id);
+  }
+
+  public touchSession(id: string): void {
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?').run(now, id);
+  }
+
+  // Conversations (Messages)
+  public saveMessage(
+    role: string,
+    content: string,
+    tokens: number = 0,
+    model?: string,
+    metadata?: string,
+    sessionId: string = 'default'
+  ): number {
     const timestamp = new Date().toISOString();
+    if (sessionId !== 'default') {
+      const exists = this.db.prepare('SELECT id FROM chat_sessions WHERE id = ?').get(sessionId);
+      if (!exists) {
+        this.createSession('Nowa rozmowa', null, sessionId);
+      }
+    }
     const result = this.db.prepare(`
-      INSERT INTO conversations (role, content, timestamp, tokens, model, metadata)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(role, content, timestamp, tokens, model || null, metadata || null);
+      INSERT INTO conversations (role, content, timestamp, tokens, model, metadata, session_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(role, content, timestamp, tokens, model || null, metadata || null, sessionId);
+    this.touchSession(sessionId);
     return Number(result.lastInsertRowid);
   }
 
-  public getRecentMessages(limit: number = 20): any[] {
+  public getRecentMessages(limit: number = 30, sessionId: string = 'default'): any[] {
     const rows = this.db.prepare(`
-      SELECT * FROM conversations ORDER BY id DESC LIMIT ?
-    `).all(limit);
+      SELECT * FROM conversations WHERE session_id = ? ORDER BY id DESC LIMIT ?
+    `).all(sessionId, limit);
     return rows.reverse();
   }
 
-  public clearConversations(): void {
-    this.db.exec('DELETE FROM conversations');
+  public getAllSessionMessages(sessionId: string): any[] {
+    return this.db.prepare(`
+      SELECT * FROM conversations WHERE session_id = ? ORDER BY id ASC
+    `).all(sessionId);
+  }
+
+  public clearConversations(sessionId?: string): void {
+    if (sessionId) {
+      this.db.prepare('DELETE FROM conversations WHERE session_id = ?').run(sessionId);
+    } else {
+      this.db.exec('DELETE FROM conversations');
+    }
+  }
+
+  // Global Search across sessions and messages
+  public searchAllSessions(query: string): any[] {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return [];
+
+    const likeQuery = `%${trimmed}%`;
+
+    const matchingSessions = this.db.prepare(`
+      SELECT s.*, COUNT(c.id) as message_count
+      FROM chat_sessions s
+      LEFT JOIN conversations c ON c.session_id = s.id
+      WHERE LOWER(s.title) LIKE ?
+      GROUP BY s.id
+      ORDER BY s.updated_at DESC
+      LIMIT 20
+    `).all(likeQuery) as any[];
+
+    const matchingMessages = this.db.prepare(`
+      SELECT c.id, c.session_id, c.role, c.content, c.timestamp, s.title as session_title
+      FROM conversations c
+      JOIN chat_sessions s ON c.session_id = s.id
+      WHERE LOWER(c.content) LIKE ?
+      ORDER BY c.id DESC
+      LIMIT 50
+    `).all(likeQuery) as any[];
+
+    const resultsMap = new Map<string, any>();
+
+    for (const session of matchingSessions) {
+      resultsMap.set(session.id, {
+        session,
+        matches: []
+      });
+    }
+
+    for (const msg of matchingMessages) {
+      let entry = resultsMap.get(msg.session_id);
+      if (!entry) {
+        const session = this.getSession(msg.session_id);
+        if (session) {
+          entry = { session, matches: [] };
+          resultsMap.set(msg.session_id, entry);
+        }
+      }
+      if (entry) {
+        const idx = msg.content.toLowerCase().indexOf(trimmed);
+        const start = Math.max(0, idx - 40);
+        const end = Math.min(msg.content.length, idx + trimmed.length + 40);
+        const snippet = (start > 0 ? '...' : '') + 
+          msg.content.substring(start, end) + 
+          (end < msg.content.length ? '...' : '');
+
+        entry.matches.push({
+          messageId: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: msg.timestamp,
+          snippet
+        });
+      }
+    }
+
+    return Array.from(resultsMap.values());
   }
 
   // Learned Facts

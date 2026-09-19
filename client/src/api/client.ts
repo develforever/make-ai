@@ -1,4 +1,4 @@
-import type { BudgetStatus, KeyStatus, ExtractedFact, OrchestratorStatus, Message, KANTelemetry } from '../types';
+import type { BudgetStatus, KeyStatus, ExtractedFact, OrchestratorStatus, Message, KANTelemetry, ChatFolder, ChatSession, SearchResult } from '../types';
 import { browserStore } from '../services/storage';
 import { browserCostGuard } from '../services/costGuard';
 import { browserOrchestrator } from '../services/orchestrator';
@@ -141,25 +141,143 @@ export const api = {
     await browserStore.clearAllFacts();
   },
 
-  async getConversations(): Promise<{ messages: Message[] }> {
+  // Folders
+  async getFolders(): Promise<{ folders: ChatFolder[] }> {
     if (await checkBackend()) {
       try {
-        const res = await fetch(`${API_BASE}/conversations`);
+        const res = await fetch(`${API_BASE}/folders`);
         if (res.ok) return await res.json();
       } catch {}
     }
-    const messages = await browserStore.getRecentMessages(50);
-    return { messages };
+    const folders = await browserStore.getFolders();
+    return { folders };
   },
 
-  async clearConversations(): Promise<void> {
+  async saveFolder(name: string, color?: string, id?: string): Promise<{ success: boolean; id: string }> {
     if (await checkBackend()) {
       try {
-        const res = await fetch(`${API_BASE}/conversations/clear`, { method: 'POST' });
+        const res = await fetch(`${API_BASE}/folders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, color, id }),
+        });
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    const folderId = await browserStore.saveFolder(name, color, id);
+    return { success: true, id: folderId };
+  },
+
+  async deleteFolder(id: string): Promise<void> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/folders/${id}`, { method: 'DELETE' });
         if (res.ok) return;
       } catch {}
     }
-    await browserStore.clearConversations();
+    await browserStore.deleteFolder(id);
+  },
+
+  // Sessions
+  async getSessions(options?: { includeArchived?: boolean; folderId?: string }): Promise<{ sessions: ChatSession[] }> {
+    if (await checkBackend()) {
+      try {
+        const params = new URLSearchParams();
+        if (options?.includeArchived) params.set('includeArchived', 'true');
+        if (options?.folderId !== undefined) params.set('folderId', options.folderId);
+        const res = await fetch(`${API_BASE}/sessions?${params.toString()}`);
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    const sessions = await browserStore.getSessions(options);
+    return { sessions };
+  },
+
+  async getSession(id: string): Promise<{ session: ChatSession | null }> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${id}`);
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    const session = await browserStore.getSession(id);
+    return { session };
+  },
+
+  async createSession(title?: string, folder_id?: string | null, id?: string): Promise<{ success: boolean; session: ChatSession }> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/sessions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, folder_id, id }),
+        });
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    const session = await browserStore.createSession(title, folder_id, id);
+    return { success: true, session };
+  },
+
+  async updateSession(id: string, updates: Partial<ChatSession>): Promise<{ success: boolean; session?: ChatSession }> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        });
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    await browserStore.updateSession(id, updates);
+    const session = await browserStore.getSession(id);
+    return { success: true, session: session || undefined };
+  },
+
+  async deleteSession(id: string): Promise<void> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' });
+        if (res.ok) return;
+      } catch {}
+    }
+    await browserStore.deleteSession(id);
+  },
+
+  // Conversations (Messages per session)
+  async getConversations(limit: number = 50, sessionId: string = 'default'): Promise<{ messages: Message[] }> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${sessionId}/messages?limit=${limit}`);
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    const messages = await browserStore.getRecentMessages(limit, sessionId);
+    return { messages };
+  },
+
+  async clearConversations(sessionId?: string): Promise<void> {
+    if (await checkBackend()) {
+      try {
+        const endpoint = sessionId ? `${API_BASE}/sessions/${sessionId}/messages` : `${API_BASE}/conversations/clear`;
+        const res = await fetch(endpoint, { method: sessionId ? 'DELETE' : 'POST' });
+        if (res.ok) return;
+      } catch {}
+    }
+    await browserStore.clearConversations(sessionId);
+  },
+
+  // Global Search across sessions
+  async searchAllSessions(query: string): Promise<{ query: string; results: SearchResult[] }> {
+    if (await checkBackend()) {
+      try {
+        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+        if (res.ok) return await res.json();
+      } catch {}
+    }
+    const results = await browserStore.searchAllSessions(query);
+    return { query, results };
   },
 
   async getOrchestratorStatus(): Promise<OrchestratorStatus> {
@@ -220,7 +338,9 @@ export const api = {
       onUsage?: (usage: any) => void;
       onError?: (error: string) => void;
       onDone?: () => void;
-    }
+    },
+    sessionId: string = 'default',
+    referencedSessionIds: string[] = []
   ): Promise<void> {
     const isBackend = await checkBackend();
 
@@ -229,7 +349,7 @@ export const api = {
         const res = await fetch(`${API_BASE}/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, sessionId, referencedSessionIds }),
         });
 
         if (!res.ok) {
@@ -292,7 +412,7 @@ export const api = {
     }
 
     // Wykonanie przez wbudowany w przeglądarkę Browser-Native Orchestrator
-    await browserOrchestrator.streamChat(message, callbacks);
+    await browserOrchestrator.streamChat(message, callbacks, sessionId, referencedSessionIds);
   },
 
   async getKANTelemetry(): Promise<KANTelemetry | null> {

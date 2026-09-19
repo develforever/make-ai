@@ -713,7 +713,51 @@
 
     <!-- SLIDE 8 -->
     <section class="slide" data-slide="8">
-      <div class="slide-number">Slajd 08 // Podsumowanie Inżynieryjne</div>
+      <div class="slide-number">Slajd 08 // Architektura Wielosesyjna & Graf Wiedzy</div>
+      <h1 class="slide-title">Hierarchia Sesji i Transfer Wiedzy Międzysesyjnej</h1>
+      <p class="slide-subtitle">
+        Eliminacja monolitycznej historii: izolacja kontekstów per-sesja, katalogowanie i kontrolowany transfer wiedzy (@mention) bez zanieczyszczania uwagi.
+      </p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title cyan">Kluczowe Mechanizmy Zarządzania Sesjami</div>
+          <div class="card-body">
+            <ul style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
+              <li><strong>Izolacja Per-Sesja:</strong> Wiadomości indeksowane kluczem <code>session_id</code> w B-Tree SQLite WAL oraz IndexedDB v2. Zero wycieków między wątkami.</li>
+              <li><strong>Dwufazowe Auto-Tytułowanie:</strong> Natychmiastowa heurystyka w O(1) + asynchroniczne streszczenie LLM (3–5 słów) po zakończeniu strumienia.</li>
+              <li><strong>Cykl Życia Sesji:</strong> Przypinanie (<em>Pinning</em>) na szczycie listy, archiwizacja (<em>Soft Archive</em>) oraz kaskadowe usuwanie powiązanych rekordów.</li>
+              <li><strong>Grupowanie w Katalogi:</strong> Tworzenie, edycja i bezpieczne usuwanie folderów z zachowaniem sesji.</li>
+              <li><strong>Globalne Wyszukiwanie:</strong> Szybkie przeszukiwanie tytułów i treści z generowaniem dynamicznych wycinków tekstu (<em>snippets</em>).</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="code-block">
+┌─────────────────────────────────────────────────────────────┐
+│          CROSS-SESSION KNOWLEDGE RESOLVER (MAX 400 TOK.)    │
+│                                                             │
+│ Sesja A: [Architektura KAN] ──► Baza Pamięci SQLite / IDB   │
+│                                           │                 │
+│                                           ▼                 │
+│ Sesja B: "Jak w @Sesja_A rozwiązać SAM?"  │                 │
+│                 │                         │                 │
+│                 ▼                         ▼                 │
+│      [SessionResolver] ◄── Streszczenie + Kluczowe Tury     │
+│                 │                                           │
+│                 ▼ (Wstrzyknięcie z twardym limitem 400 tok.) │
+│       [PersonaWorker System Prompt Context Block]           │
+│                 │                                           │
+│                 ▼                                           │
+│       [Spójna Odpowiedź ze Znajomością Ustaleń z Sesji A]   │
+└─────────────────────────────────────────────────────────────┘
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9 -->
+    <section class="slide" data-slide="9">
+      <div class="slide-number">Slajd 09 // Podsumowanie Inżynieryjne</div>
       <h1 class="slide-title">Lekcja Architektoniczna</h1>
       <p class="slide-subtitle">
         Wnioski końcowe z budowy autonomicznego systemu kognitywnego.
@@ -735,6 +779,7 @@
               <li>Architektura Dual-Engine pozwala uruchomić aplikację bezkosztowo na GitHub Pages.</li>
               <li>Wdrożony fizyczny rdzeń KAN + SOM + EWC + SAM + SWA z mostkiem TypeScript.</li>
               <li>Filar 4: Lokalna inferencja Ollama (Edge / Local-First) ze streamingiem SSE/NDJSON i kosztem $0.00.</li>
+              <li>Wielosesyjny Sidebar z katalogami, wyszukiwarką i transferem wiedzy (@mention).</li>
             </ul>
           </div>
         </div>
@@ -744,11 +789,12 @@
           <div class="card-body">
             <ul style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
               <li><strong>Backend:</strong> Fastify + Node 24 <code>node:sqlite</code> (Port 3001)</li>
-              <li><strong>Browser-Native:</strong> IndexedDB Cognitive Store + CORS OpenRouter/Wiki</li>
+              <li><strong>Browser-Native:</strong> IndexedDB v2 Cognitive Store + CORS OpenRouter/Wiki</li>
               <li><strong>Edge Inference:</strong> Ollama Local-First (/v1 SSE & /api/chat) w <code>BrowserPersonaWorker</code></li>
               <li><strong>Neural Core PyTorch:</strong> KAN + SOM + EWC + SAM + SWA (7/7 testów zdanych)</li>
               <li><strong>Neural Core TypeScript:</strong> LocalTeacher + SOM + KAN + EWC (5/5 testów zdanych)</li>
-              <li><strong>Frontend:</strong> React 19 + Tailwind CSS + KAN Neural Lab Visualizer</li>
+              <li><strong>System Sesji:</strong> Foldery, Przypinanie, Archiwum, Search, Cross-Session (8/8 testów)</li>
+              <li><strong>Frontend:</strong> React 19 + Tailwind CSS + Sidebar + KAN Visualizer</li>
               <li><strong>Hosting Portfolio:</strong> GitHub Pages (Static SPA)</li>
             </ul>
           </div>
@@ -761,7 +807,7 @@
   <!-- Footer Controls -->
   <footer>
     <div class="slide-indicator">
-      SLAJD <span id="currentSlide">1</span> / <span id="totalSlides">8</span>
+      SLAJD <span id="currentSlide">1</span> / <span id="totalSlides">9</span>
     </div>
 
     <div class="controls">

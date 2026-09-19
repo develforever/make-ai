@@ -8,8 +8,10 @@ import { memoryWorker } from './memoryWorker.js';
 
 export interface PersonaGenerationInput {
   userMessage: string;
+  sessionId?: string;
   wikiContext?: WikiSummaryResult | null;
   historyLimit?: number;
+  crossSessionContexts?: string[];
 }
 
 export class PersonaWorker {
@@ -34,7 +36,7 @@ export class PersonaWorker {
     const combinedFacts = [...transientFacts, ...allStoredFacts];
     const learnedFacts = memoryRanker.rankFacts(input.userMessage, combinedFacts, 15);
 
-    const history = database.getRecentMessages(input.historyLimit || 12);
+    const history = database.getRecentMessages(input.historyLimit || 12, input.sessionId || 'default');
     const budget = costGuard.getStatus();
     const isPaused = database.getSetting('orchestrator_paused') === 'true';
 
@@ -90,6 +92,13 @@ Temat: "${input.wikiContext.title}"
 Treść: "${input.wikiContext.summary}"
 Źródło: ${input.wikiContext.url}
 (Użyj tych zweryfikowanych faktów w swojej wypowiedzi, zachowując swój własny, naturalny styl).`;
+    }
+
+    // 4. Wstrzyknięcie Kontekstu z Powiązanych Sesji (Cross-Session Knowledge)
+    if (input.crossSessionContexts && input.crossSessionContexts.length > 0) {
+      systemInstruction += `\n\n### POWIĄZANY KONTEKST Z INNYCH SESJI ROZMÓW (ODWOŁANIA UŻYTKOWNIKA):
+Użytkownik jawnie odwołał się do ustaleń z poniższych sesji. Wykorzystaj ten kontekst w sposób spójny i precyzyjny:
+${input.crossSessionContexts.join('\n\n')}`;
     }
 
     const messages: ChatMessage[] = [

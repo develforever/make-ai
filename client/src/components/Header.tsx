@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Brain, DollarSign, Settings, Pause, Play, Presentation, Layers, Cpu } from 'lucide-react';
+import { Sparkles, Brain, DollarSign, Settings, Pause, Play, Presentation, Layers, Cpu, PanelLeft } from 'lucide-react';
 import type { BudgetStatus, OrchestratorStatus } from '../types';
 
 interface HeaderProps {
@@ -8,6 +8,8 @@ interface HeaderProps {
   orchestrator: OrchestratorStatus | null;
   learnedFactsCount: number;
   engineMode?: 'backend' | 'browser-native';
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
   onTogglePause: () => void;
   onOpenSettings: () => void;
   onOpenBrain: () => void;
@@ -21,6 +23,8 @@ export const Header: React.FC<HeaderProps> = ({
   orchestrator,
   learnedFactsCount,
   engineMode = 'browser-native',
+  isSidebarOpen = true,
+  onToggleSidebar,
   onTogglePause,
   onOpenSettings,
   activeTab,
@@ -33,8 +37,22 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-20 px-4 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        {/* Logo & Agent Identity */}
+        {/* Logo & Agent Identity & Sidebar Toggle */}
         <div className="flex items-center gap-3">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isSidebarOpen
+                  ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-slate-200 border border-slate-700/80'
+              }`}
+              title={isSidebarOpen ? 'Ukryj panel boczny' : 'Pokaż panel boczny'}
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+          )}
+
           <div className="relative">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg shadow-cyan-900/30">
               <Sparkles className="w-5 h-5" />

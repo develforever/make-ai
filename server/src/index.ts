@@ -5,6 +5,7 @@ import { chatRoutes } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
 import { budgetRoutes } from './routes/budget.js';
 import { orchestratorRoutes } from './routes/orchestrator.js';
+import { sessionRoutes } from './routes/sessions.js';
 import { database } from './db/database.js';
 import { costGuard } from './services/costGuard.js';
 
@@ -25,6 +26,7 @@ async function main() {
   await fastify.register(memoryRoutes);
   await fastify.register(budgetRoutes);
   await fastify.register(orchestratorRoutes);
+  await fastify.register(sessionRoutes);
 
   // Health check
   fastify.get('/api/health', async () => {
