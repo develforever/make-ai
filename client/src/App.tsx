@@ -1,13 +1,24 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { Header } from './components/Header';
 import { ChatWindow } from './components/ChatWindow';
-import { BrainVisualizer } from './components/BrainVisualizer';
-import { BudgetGauge } from './components/BudgetGauge';
-import { SettingsModal } from './components/SettingsModal';
-import { KANVisualizer } from './components/KANVisualizer';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import type { Message, BudgetStatus, OrchestratorStatus, KeyStatus, ExtractedFact, ChatSession, ChatFolder } from './types';
-import { api } from './api/client';
+import { api, backendConnectionManager } from './api/client';
+
+const BrainVisualizer = lazy(() => import('./components/BrainVisualizer').then(m => ({ default: m.BrainVisualizer })));
+const BudgetGauge = lazy(() => import('./components/BudgetGauge').then(m => ({ default: m.BudgetGauge })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const KANVisualizer = lazy(() => import('./components/KANVisualizer').then(m => ({ default: m.KANVisualizer })));
+
+const SleekLoadingFallback: React.FC<{ label?: string }> = ({ label = 'Ładowanie modułu...' }) => (
+  <div className="flex flex-col items-center justify-center min-h-[360px] w-full p-8 text-center animate-pulse">
+    <div className="relative flex items-center justify-center">
+      <div className="w-12 h-12 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
+      <div className="absolute w-6 h-6 rounded-full border-2 border-purple-500/30 border-b-purple-400 animate-spin [animation-direction:reverse] [animation-duration:1.5s]" />
+    </div>
+    <span className="mt-4 text-xs font-mono text-slate-400 tracking-wider uppercase">{label}</span>
+  </div>
+);
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'chat' | 'brain' | 'budget' | 'neural'>('chat');
@@ -86,6 +97,17 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     refreshAllData();
+
+    const unsubscribe = backendConnectionManager.subscribe((status) => {
+      setEngineMode(status === 'connected' ? 'backend' : 'browser-native');
+      if (status === 'connected') {
+        refreshAllData();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [refreshAllData]);
 
   // Reakcja na zmianę aktywnej sesji
@@ -380,38 +402,52 @@ export const App: React.FC = () => {
 
           {activeTab === 'brain' && (
             <div className="flex-1 py-6">
-              <BrainVisualizer
-                facts={facts}
-                onRefresh={refreshAllData}
-                logs={orchestrator?.logs || []}
-              />
+              <Suspense fallback={<SleekLoadingFallback label="Inicjalizacja Modułu Pamięci Kognitywnej..." />}>
+                <BrainVisualizer
+                  facts={facts}
+                  onRefresh={refreshAllData}
+                  logs={orchestrator?.logs || []}
+                />
+              </Suspense>
             </div>
           )}
 
           {activeTab === 'budget' && (
             <div className="flex-1 py-6">
-              <BudgetGauge
-                budget={budget}
-                onRefresh={refreshAllData}
-              />
+              <Suspense fallback={<SleekLoadingFallback label="Pobieranie Danych CostGuard..." />}>
+                <BudgetGauge
+                  budget={budget}
+                  onRefresh={refreshAllData}
+                />
+              </Suspense>
             </div>
           )}
 
           {activeTab === 'neural' && (
             <div className="flex-1 py-6">
-              <KANVisualizer />
+              <Suspense fallback={<SleekLoadingFallback label="Ładowanie Topologii KAN Splines..." />}>
+                <KANVisualizer />
+              </Suspense>
             </div>
           )}
         </main>
       </div>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        keyStatus={keyStatus}
-        orchestrator={orchestrator}
-        onSettingsSaved={refreshAllData}
-      />
+      {isSettingsOpen && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <div className="w-8 h-8 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
+          </div>
+        }>
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            keyStatus={keyStatus}
+            orchestrator={orchestrator}
+            onSettingsSaved={refreshAllData}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

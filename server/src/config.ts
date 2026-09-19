@@ -62,5 +62,7 @@ export const DEFAULT_CONFIG = {
   TOTAL_BUDGET_USD: 2.00,
   SAFETY_MARGIN_USD: 0.01,
   AGENT_NAME: 'Aura',
-  DB_PATH: path.resolve(process.cwd(), 'data', 'make_ai.sqlite')
+  LIBSQL_URL: process.env.LIBSQL_URL || 'file:data/makeai.db',
+  LIBSQL_AUTH_TOKEN: process.env.LIBSQL_AUTH_TOKEN || undefined,
+  DB_PATH: path.resolve(process.cwd(), 'data', 'makeai.db')
 };

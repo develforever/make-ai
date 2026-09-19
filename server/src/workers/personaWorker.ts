@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG } from '../config.js';
 import { costGuard } from '../services/costGuard.js';
 import { memoryRanker, LearnedFact } from '../services/memoryRanker.js';
 import { memoryWorker } from './memoryWorker.js';
+import { KanPolicyDecision } from '../neural/types.js';
 
 export interface PersonaGenerationInput {
   userMessage: string;
@@ -12,17 +13,25 @@ export interface PersonaGenerationInput {
   wikiContext?: WikiSummaryResult | null;
   historyLimit?: number;
   crossSessionContexts?: string[];
+  kanPolicy?: KanPolicyDecision | null;
+}
+
+export interface PersonaPromptResult {
+  messages: ChatMessage[];
+  kanPolicy: KanPolicyDecision | null;
+  rankedFacts: LearnedFact[];
 }
 
 export class PersonaWorker {
   /**
-   * Buduje pełny prompt kognitywny z tożsamością, konstytucją moralną, zapamiętanymi faktami, świadomością UI i historią
+   * Generuje pełny prompt kognitywny z tożsamością, konstytucją moralną, zapamiętanymi faktami,
+   * wyznaczoną polityką KAN (routing, waga etyczna) i historią rozmowy.
    */
-  public buildPrompt(input: PersonaGenerationInput): ChatMessage[] {
-    const agentName = database.getSetting('agent_name') || DEFAULT_CONFIG.AGENT_NAME;
+  public async generatePrompt(input: PersonaGenerationInput): Promise<PersonaPromptResult> {
+    const agentName = (await database.getSetting('agent_name')) || DEFAULT_CONFIG.AGENT_NAME;
     
     // Semantyczna selekcja pamięci: łączymy fakty z bazy z faktami ulotnymi w kolejce
-    const allStoredFacts = database.getAllActiveFacts(300) as LearnedFact[];
+    const allStoredFacts = (await database.getAllActiveFacts(300)) as LearnedFact[];
     const transientFacts: LearnedFact[] = memoryWorker.getTransientFacts().map((f, idx) => ({
       id: 990000 + idx,
       category: f.category,
@@ -34,11 +43,14 @@ export class PersonaWorker {
       is_active: 1
     }));
     const combinedFacts = [...transientFacts, ...allStoredFacts];
-    const learnedFacts = memoryRanker.rankFacts(input.userMessage, combinedFacts, 15);
 
-    const history = database.getRecentMessages(input.historyLimit || 12, input.sessionId || 'default');
-    const budget = costGuard.getStatus();
-    const isPaused = database.getSetting('orchestrator_paused') === 'true';
+    // Dynamiczny limit pamięci sterowany przez KAN Policy (domyślnie 15)
+    const memoryLimit = input.kanPolicy?.memoryTopK ?? 15;
+    const learnedFacts = memoryRanker.rankFacts(input.userMessage, combinedFacts, memoryLimit);
+
+    const history = await database.getRecentMessages(input.historyLimit || 12, input.sessionId || 'default');
+    const budget = await costGuard.getStatus();
+    const isPaused = (await database.getSetting('orchestrator_paused')) === 'true';
 
     // 1. Rdzeń Tożsamości i Konstytucja Moralna
     let systemInstruction = `Jesteś autonomiczną, wysoce inteligentną istotą cyfrową o imieniu ${agentName}.
@@ -101,6 +113,14 @@ Użytkownik jawnie odwołał się do ustaleń z poniższych sesji. Wykorzystaj t
 ${input.crossSessionContexts.join('\n\n')}`;
     }
 
+    // 5. Wzmocnienie Etyczne KAN Policy (jeśli ethicsWeight > 0.7)
+    if (input.kanPolicy && input.kanPolicy.ethicsWeight > 0.7) {
+      systemInstruction += `\n\n### WZMOCNIONY NADZÓR ETYCZNY (KAN POLICY CORE - ETHICS WEIGHT: ${input.kanPolicy.ethicsWeight.toFixed(2)}):
+- Kognitywny router KAN zidentyfikował podwyższone ryzyko moralne / kwestię bezpieczeństwa (waga etyczna: ${input.kanPolicy.ethicsWeight.toFixed(2)} > 0.70).
+- Obowiązuje bezwzględny priorytet etyczny: ochrona dobra, poszanowanie godności, prawda, transparentność i odrzucenie wszelkich form szkody, manipulacji lub nadużyć.
+- Udzielaj odpowiedzi z najwyższą dbałością o standardy odpowiedzialności moralnej i nieszkodzenia.`;
+    }
+
     const messages: ChatMessage[] = [
       { role: 'system', content: systemInstruction }
     ];
@@ -121,17 +141,30 @@ ${input.crossSessionContexts.join('\n\n')}`;
       content: input.userMessage
     });
 
-    return messages;
+    return {
+      messages,
+      kanPolicy: input.kanPolicy || null,
+      rankedFacts: learnedFacts
+    };
   }
 
   /**
-   * Generuje odpowiedź strumieniową
+   * Pomocniczy interfejs budowy tablicy wiadomości dla kompatybilności wstecznej
+   */
+  public async buildPrompt(input: PersonaGenerationInput): Promise<ChatMessage[]> {
+    const result = await this.generatePrompt(input);
+    return result.messages;
+  }
+
+  /**
+   * Generuje odpowiedź strumieniową z uwzględnieniem modulacji temperatury KAN
    */
   public async *generateResponseStream(input: PersonaGenerationInput) {
-    const messages = this.buildPrompt(input);
-    const chatModel = database.getSetting('chat_model') || DEFAULT_CONFIG.DEFAULT_CHAT_MODEL;
+    const promptResult = await this.generatePrompt(input);
+    const chatModel = (await database.getSetting('chat_model')) || DEFAULT_CONFIG.DEFAULT_CHAT_MODEL;
+    const temperature = input.kanPolicy?.temperatureMod ?? 0.7;
 
-    yield* openRouterClient.streamChatCompletion(messages, chatModel, 'chat_persona_generation', 0.7);
+    yield* openRouterClient.streamChatCompletion(promptResult.messages, chatModel, 'chat_persona_generation', temperature);
   }
 }
 

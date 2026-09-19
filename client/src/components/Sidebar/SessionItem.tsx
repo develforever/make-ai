@@ -107,7 +107,13 @@ export const SessionItem: React.FC<SessionItemProps> = ({
 
         {isEditing ? (
           <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+            <label htmlFor={`rename-session-input-${session.id}`} className="sr-only">
+              Zmień tytuł sesji
+            </label>
             <input
+              id={`rename-session-input-${session.id}`}
+              name="sessionRename"
+              aria-label="Zmień tytuł sesji"
               ref={inputRef}
               type="text"
               value={editTitle}

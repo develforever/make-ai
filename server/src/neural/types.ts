@@ -28,3 +28,29 @@ export interface FisherDiagnostic {
   maxRigidity: number;
   status: 'active' | 'uninitialized';
 }
+
+export interface KanPolicyDecision {
+  expertIndex: number;
+  expertName: string;
+  confidence: number;
+  temperatureMod: number;
+  memoryTopK: number;
+  ethicsWeight: number;
+}
+
+export interface RewardFeedback {
+  query: string;
+  responseLength: number;
+  userSatisfaction: number;
+  tokenCostUsd: number;
+  factualConsistency: number;
+}
+
+export interface DreamConsolidationResult {
+  synthesizedAxiom: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence: number;
+}
+

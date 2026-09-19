@@ -9,8 +9,11 @@
  */
 
 export * from './types.js';
+export * from './SemanticEncoder.js';
 export * from './LocalTeacherLLM.js';
 export * from './SOMRouter.js';
 export * from './KANLayer.js';
 export * from './EWCOptimizer.js';
 export * from './TrainingLoop.js';
+export * from './kanService.js';
+

@@ -119,12 +119,15 @@ export const BudgetGauge: React.FC<BudgetGaugeProps> = ({ budget, onRefresh }) =
           <h3 className="text-base font-semibold text-white mb-3">Zmień limit budżetu</h3>
           <form onSubmit={handleUpdateLimit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label htmlFor="budget-new-limit-input" className="block text-xs font-medium text-slate-400 mb-1">
                 Nowy limit budżetu (USD)
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-slate-500 font-mono">$</span>
+                <span className="absolute left-3 top-2.5 text-slate-500 font-mono" aria-hidden="true">$</span>
                 <input
+                  id="budget-new-limit-input"
+                  name="budgetLimitUsd"
+                  aria-label="Nowy limit budżetu w USD"
                   type="number"
                   step="0.1"
                   min="0.1"

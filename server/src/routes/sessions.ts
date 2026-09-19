@@ -4,7 +4,7 @@ import { database } from '../db/database.js';
 export async function sessionRoutes(fastify: FastifyInstance) {
   // === Folders ===
   fastify.get('/api/folders', async () => {
-    const folders = database.getFolders();
+    const folders = await database.getFolders();
     return { folders };
   });
 
@@ -15,7 +15,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     if (!name || typeof name !== 'string' || !name.trim()) {
       return reply.status(400).send({ error: 'Nazwa katalogu jest wymagana' });
     }
-    const folderId = database.saveFolder(name.trim(), color, id);
+    const folderId = await database.saveFolder(name.trim(), color, id);
     return { success: true, id: folderId, name: name.trim(), color };
   });
 
@@ -23,7 +23,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     Params: { id: string };
   }>) => {
     const { id } = request.params;
-    database.deleteFolder(id);
+    await database.deleteFolder(id);
     return { success: true, message: `Katalog ${id} został usunięty` };
   });
 
@@ -33,7 +33,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
   }>) => {
     const includeArchived = request.query.includeArchived === 'true' || request.query.includeArchived === '1';
     const folderId = request.query.folderId !== undefined ? request.query.folderId : undefined;
-    const sessions = database.getSessions({
+    const sessions = await database.getSessions({
       includeArchived,
       folderId: folderId === 'null' ? null : folderId
     });
@@ -44,8 +44,8 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     Body: { title?: string; folder_id?: string | null; id?: string };
   }>) => {
     const { title, folder_id, id } = request.body || {};
-    const sessionId = database.createSession(title, folder_id, id);
-    const session = database.getSession(sessionId);
+    const sessionId = await database.createSession(title, folder_id, id);
+    const session = await database.getSession(sessionId);
     return { success: true, session };
   });
 
@@ -53,7 +53,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     Params: { id: string };
   }>, reply: FastifyReply) => {
     const { id } = request.params;
-    const session = database.getSession(id);
+    const session = await database.getSession(id);
     if (!session) {
       return reply.status(404).send({ error: 'Sesja nie została znaleziona' });
     }
@@ -71,12 +71,12 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     };
   }>, reply: FastifyReply) => {
     const { id } = request.params;
-    const current = database.getSession(id);
+    const current = await database.getSession(id);
     if (!current) {
       return reply.status(404).send({ error: 'Sesja nie została znaleziona' });
     }
-    database.updateSession(id, request.body || {});
-    const updated = database.getSession(id);
+    await database.updateSession(id, request.body || {});
+    const updated = await database.getSession(id);
     return { success: true, session: updated };
   });
 
@@ -84,7 +84,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     Params: { id: string };
   }>) => {
     const { id } = request.params;
-    database.deleteSession(id);
+    await database.deleteSession(id);
     return { success: true, message: `Sesja ${id} i powiązane wiadomości zostały trwale usunięte` };
   });
 
@@ -95,7 +95,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
   }>) => {
     const { id } = request.params;
     const limit = request.query.limit ? parseInt(request.query.limit, 10) : 50;
-    const messages = database.getRecentMessages(limit, id);
+    const messages = await database.getRecentMessages(limit, id);
     return { messages };
   });
 
@@ -103,7 +103,7 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     Params: { id: string };
   }>) => {
     const { id } = request.params;
-    database.clearConversations(id);
+    await database.clearConversations(id);
     return { success: true, message: `Historia sesji ${id} została wyczyszczona` };
   });
 
@@ -115,7 +115,24 @@ export async function sessionRoutes(fastify: FastifyInstance) {
     if (!query || typeof query !== 'string' || !query.trim()) {
       return reply.status(400).send({ error: 'Parametr zapytania q jest wymagany' });
     }
-    const results = database.searchAllSessions(query.trim());
+    const results = await database.searchAllSessions(query.trim());
     return { query: query.trim(), results };
+  });
+
+  // === Offline Reconciliation / Batch Sync ===
+  fastify.post('/api/sync/reconcile', async (request: FastifyRequest<{
+    Body: {
+      folders?: any[];
+      sessions?: any[];
+      messages?: any[];
+    };
+  }>) => {
+    const payload = request.body || {};
+    const result = await database.reconcileSyncData(payload);
+    return {
+      success: true,
+      folders: result.folders,
+      sessions: result.sessions
+    };
   });
 }

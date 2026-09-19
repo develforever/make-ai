@@ -62,7 +62,7 @@ export class MemoryWorker {
       const facts = await this.executeExtraction(task.userMessage, task.assistantReply, task.sourceMessageId);
       task.resolve(facts);
     } catch (err: any) {
-      database.logOrchestrator('MemoryWorker', 'queue_task_error', 'failed', err.message);
+      await database.logOrchestrator('MemoryWorker', 'queue_task_error', 'failed', err.message);
       task.resolve([]);
     } finally {
       this.isProcessing = false;
@@ -76,9 +76,9 @@ export class MemoryWorker {
    * Performs the actual extraction with self-healing JSON parsing and SQLite transaction.
    */
   private async executeExtraction(userMessage: string, assistantReply: string, sourceMessageId?: number): Promise<ExtractedFact[]> {
-    const isPaused = database.getSetting('orchestrator_paused') === 'true';
+    const isPaused = (await database.getSetting('orchestrator_paused')) === 'true';
     if (isPaused) {
-      database.logOrchestrator('MemoryWorker', 'skip', 'paused', 'Orkiestrator jest wstrzymany');
+      await database.logOrchestrator('MemoryWorker', 'skip', 'paused', 'Orkiestrator jest wstrzymany');
       return [];
     }
 
@@ -117,7 +117,7 @@ Zasady:
       }
     ];
 
-    const extractionModel = database.getSetting('extraction_model') || DEFAULT_CONFIG.DEFAULT_EXTRACTION_MODEL;
+    const extractionModel = (await database.getSetting('extraction_model')) || DEFAULT_CONFIG.DEFAULT_EXTRACTION_MODEL;
     const result = await openRouterClient.chatCompletion(
       extractionPrompt,
       extractionModel,
@@ -130,7 +130,7 @@ Zasady:
 
     if (facts.length > 0) {
       for (const fact of facts) {
-        database.saveLearnedFact(
+        await database.saveLearnedFact(
           fact.category,
           fact.subject,
           fact.predicate,
@@ -146,7 +146,7 @@ Zasady:
         this.transientFacts = this.transientFacts.slice(-20);
       }
 
-      database.logOrchestrator(
+      await database.logOrchestrator(
         'MemoryWorker',
         'learned_facts',
         'success',

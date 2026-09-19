@@ -129,7 +129,13 @@ export const FolderItem: React.FC<FolderItemProps> = ({
 
           {isEditing ? (
             <div className="flex items-center gap-1 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              <label htmlFor={`rename-folder-input-${folder.id}`} className="sr-only">
+                Zmień nazwę katalogu
+              </label>
               <input
+                id={`rename-folder-input-${folder.id}`}
+                name="folderRename"
+                aria-label="Zmień nazwę katalogu"
                 ref={inputRef}
                 type="text"
                 value={editName}

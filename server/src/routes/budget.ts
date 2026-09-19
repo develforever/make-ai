@@ -14,8 +14,8 @@ interface SetLimitBody {
 export async function budgetRoutes(fastify: FastifyInstance) {
   // Pobranie aktualnego stanu budżetu i ostatnich wydatków
   fastify.get('/api/budget', async (_req, reply) => {
-    const status = costGuard.getStatus();
-    const recentLedger = database.getRecentLedger(15);
+    const status = await costGuard.getStatus();
+    const recentLedger = await database.getRecentLedger(15);
     return reply.send({
       ...status,
       ledger: recentLedger
@@ -24,8 +24,8 @@ export async function budgetRoutes(fastify: FastifyInstance) {
 
   // Sprawdzenie statusu klucza API (bez ujawniania całego sekretu)
   fastify.get('/api/budget/key-status', async (_req, reply) => {
-    const hasKey = openRouterClient.hasApiKey();
-    const rawKey = database.getSetting('openrouter_api_key') || process.env.OPENROUTER_API_KEY || '';
+    const hasKey = await openRouterClient.hasApiKey();
+    const rawKey = (await database.getSetting('openrouter_api_key')) || process.env.OPENROUTER_API_KEY || '';
     const maskedKey = rawKey.length > 8 
       ? `${rawKey.slice(0, 7)}...${rawKey.slice(-4)}`
       : hasKey ? 'sk-or-***' : '';
@@ -44,8 +44,8 @@ export async function budgetRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Nieprawidłowy klucz API OpenRouter' });
     }
 
-    openRouterClient.setApiKey(apiKey.trim());
-    database.logOrchestrator('Security', 'set_key', 'success', 'Zaktualizowano klucz API OpenRouter');
+    await openRouterClient.setApiKey(apiKey.trim());
+    await database.logOrchestrator('Security', 'set_key', 'success', 'Zaktualizowano klucz API OpenRouter');
 
     return reply.send({
       success: true,
@@ -61,8 +61,8 @@ export async function budgetRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Wartość budżetu musi być liczbą dodatnią' });
     }
 
-    costGuard.setBudget(budgetUsd);
-    database.logOrchestrator('Budget', 'set_limit', 'success', `Zmieniono limit budżetu na $${budgetUsd} USD`);
+    await costGuard.setBudget(budgetUsd);
+    await database.logOrchestrator('Budget', 'set_limit', 'success', `Zmieniono limit budżetu na $${budgetUsd} USD`);
 
     return reply.send({
       success: true,

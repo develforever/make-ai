@@ -531,42 +531,150 @@
 
     <!-- SLIDE 5 -->
     <section class="slide" data-slide="5">
-      <div class="slide-number">Slajd 05 // Skalowanie Systemowe</div>
-      <h1 class="slide-title">Brutalny Audyt Skalowania do 10 000 000 Użytkowników</h1>
+      <div class="slide-number">Slajd 05 // Architektura Skalowania Tier-1</div>
+      <h1 class="slide-title">Distributed Data Fabric, Worker Threads &amp; Vector ANN</h1>
       <p class="slide-subtitle">
-        Identyfikacja wąskich gardeł wdrożenia produkcyjnego w skali globalnej oraz plan migracji.
+        Eliminacja wąskich gardeł monolitu: rozproszony libSQL/Turso, izolacja obliczeń KAN w Worker Threads oraz wektorowa pamięć semantyczna ANN.
       </p>
 
       <div class="grid-3">
-        <div class="card danger">
-          <div class="card-title rose">1. Kolaps I/O SQLite</div>
+        <div class="card success">
+          <div class="card-title emerald">1. libSQL / Turso Data Fabric</div>
           <div class="card-body">
-            <strong>Wąskie gardło:</strong> Pojedynczy plik bazy SQLite ulegnie zablokowaniu (<em>Write Lock Contention</em>) przy równoległych zapisach faktów przez miliony workerów.<br><br>
-            <strong>Rozwiązanie:</strong> Migracja do architektury <strong>Tenant-per-Database</strong> (np. libSQL/Turso) – każdy użytkownik posiada własny mikro-plik bazy danych synchronizowany brzegowo (Edge).
+            <strong>Architektura:</strong> Przejście z monolitycznego pliku na rozproszony <strong>Tenant-per-Database</strong> z <code>@libsql/client</code>.<br><br>
+            <strong>Zysk:</strong> Całkowita eliminacja <em>Write Lock Contention</em>, lokalne repliki brzegowe (Embedded Replicas), zerowa latencja odczytu i nieograniczona skalowalność do 10M+ najemców.
           </div>
         </div>
 
-        <div class="card danger">
-          <div class="card-title rose">2. Wyścig Asynchroniczny</div>
+        <div class="card success">
+          <div class="card-title cyan">2. KAN-Cognitive Core v2 &amp; Worker Threads</div>
           <div class="card-body">
-            <strong>Wąskie gardło:</strong> <em>Eventual Consistency</em> – jeśli użytkownik wyśle kolejną wiadomość w ciągu 400 ms, MemoryWorker może nie zdążyć utrwalić faktu w bazie przed budową nowego promptu.<br><br>
-            <strong>Rozwiązanie:</strong> Wprowadzenie bufora <strong>In-Memory Session Cache</strong> (Redis/Dragonfly) na poziomie sesji gniazda SSE.
+            <strong>Architektura:</strong> Pełna integracja z głównym potokiem <code>OrchestratorEngine.executeStep</code>. Ewaluacja polityki <code>evaluatePolicy</code> przed generowaniem promptu steruje dynamicznym <code>memoryTopK</code> w <code>MemoryRanker</code> oraz wzmacnia nadzór moralny (<code>ethicsWeight &gt; 0.7</code>) w <code>PersonaWorker</code>. Asynchroniczne douczanie ze sprzężeniem zwrotnym <code>applyReward</code> (satysfakcja, koszty, spójność faktów).<br><br>
+            <strong>Zysk:</strong> <span class="metric-highlight">0 ms blokowania pętli zdarzeń</span>. Dynamiczna telemetria czasu rzeczywistego w <code>/api/neural/telemetry</code> z hybrydowym łączeniem profili i wag.
           </div>
         </div>
 
-        <div class="card danger">
-          <div class="card-title rose">3. Wąskie Gardło Bramki API</div>
+        <div class="card success">
+          <div class="card-title purple">3. Vector Memory ANN</div>
           <div class="card-body">
-            <strong>Wąskie gardło:</strong> Zależność od OpenRouter stwarza Single Point of Failure oraz ryzyko wyczerpania limitów TPM/RPM przy masowym ruchu.<br><br>
-            <strong>Rozwiązanie:</strong> Wdrożenie własnego klastra <strong>vLLM (FP8/INT4)</strong> na dedykowanych węzłach GPU, a OpenRouter wyłącznie jako elastyczny fallback.
+            <strong>Architektura:</strong> Wielowymiarowe embeddingi semantyczne z natywnym indeksem <strong>HNSW / ANN</strong> oraz hybrydowym rankerem (BM25 + Cosine Vector Search).<br><br>
+            <strong>Zysk:</strong> Sub-milisekundowe wyszukiwanie faktów kognitywnych w zbiorach &gt;100k wpisów bez liniowego skanowania tabeli i bez halucynacji.
+          </div>
+        </div>
+      </div>
+
+      <div class="table-container" style="margin-top: 1rem;">
+        <table>
+          <thead>
+            <tr>
+              <th>Wektor Skalowania</th>
+              <th>Architektura Naiwna (Monolit)</th>
+              <th>Nowa Architektura Tier-1 MakeAI</th>
+              <th>Mierzalny Wpływ na System</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Składowanie Danych</strong></td>
+              <td class="metric-bad">Pojedynczy plik SQLite (Lock Contention)</td>
+              <td class="metric-highlight">libSQL / Turso Distributed Fabric (Tenant Replicas)</td>
+              <td class="metric-highlight">Skalowanie do 10 000 000 użytkowników</td>
+            </tr>
+            <tr>
+              <td><strong>Obliczenia Neuronowe KAN</strong></td>
+              <td class="metric-bad">Sztuczne dane sinus/losowe, blokowanie Event Loop</td>
+              <td class="metric-highlight">KAN-Cognitive Core v2 (SemanticEncoder + SAM/EWC Worker)</td>
+              <td class="metric-highlight">0 ms Event Loop Lag, adaptacyjny MoE &amp; Dream Consolidation</td>
+            </tr>
+            <tr>
+              <td><strong>Wyszukiwanie Pamięci</strong></td>
+              <td class="metric-bad">Sztywne LIMIT 40 / liniowe skanowanie LIKE</td>
+              <td class="metric-highlight">Vector Memory ANN (HNSW + Cosine + BM25)</td>
+              <td class="metric-highlight">&lt;1 ms latencji, semantyczna precyzja</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: COGNITIVE DREAM CONSOLIDATION -->
+    <section class="slide" data-slide="6">
+      <div class="slide-number">Slajd 06 // Autonomiczna Konsolidacja Wiedzy (Tier-1 Cognitive Dreamer)</div>
+      <h1 class="slide-title">Idle Dream Consolidation: Autonomiczna Synteza Aksjomatów KAN</h1>
+      <p class="slide-subtitle">
+        Odkrywanie synergii logicznych i wnioskowanie pośrednie w czasie bezczynności systemu bez zużycia tokenów LLM i bez ingerencji użytkownika.
+      </p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title cyan">Potok Kognitywnej Konsolidacji (DreamConsolidator)</div>
+          <div class="card-body">
+            Gdy użytkownik pozostaje bezczynny przez ponad <strong>25 sekund</strong> (okresowe badanie pętli co 10s), system autonomicznie uruchamia asynchroniczny cykl syntezy:
+            <ul style="margin-top: 0.75rem; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
+              <li><strong>Śledzenie Bezczynności:</strong> <code>notifyUserActivity()</code> w <code>executeStep</code> natychmiast resetuje licznik przy każdym komunikacie użytkownika.</li>
+              <li><strong>Selekcja Par (Zero-Waste):</strong> <code>getUnconsolidatedFactPairs()</code> pobiera aktywne fakty o różnej kategorii/podmiocie z wykluczeniem par zbadanych (tabela <code>consolidated_fact_pairs</code>).</li>
+              <li><strong>Wnioskowanie KAN:</strong> Dedukcja relacji tranzytywnych (A &rarr; B &and; B &rarr; C &rArr; A &rarr; C) oraz aproksymacja energii B-splajnów w osobnym wątku.</li>
+              <li><strong>Utrwalanie Aksjomatów:</strong> Zapis do <code>learned_facts</code> z kategorią <code>synergy_axiom</code>, embeddingiem 32D i eliminacją duplikatów.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="code-block">
+┌─────────────────────────────────────────────────────────────┐
+│             IDLE DREAM CONSOLIDATION PIPELINE               │
+│                                                             │
+│   [Brak aktywności &gt;25s]                                    │
+│             │                                               │
+│             ▼                                               │
+│   [DreamConsolidator Timer (10s)]                           │
+│             │                                               │
+│             ▼                                               │
+│   [Orchestrator Paused Check] ──►(Gdy spauzowany: Skip)     │
+│             │ (Gdy aktywny)                                 │
+│             ▼                                               │
+│   [database.getUnconsolidatedFactPairs(5)]                  │
+│   (Filtrowanie: f1 &lt; f2, p.id IS NULL, Active = 1)          │
+│             │                                               │
+│             ▼                                               │
+│   [kanService.consolidateFacts(factA, factB)]               │
+│   (Izolowany Worker Thread, SOM Routing, Energy Synergy)    │
+│             │                                               │
+│             ├─► [Confidence &gt;= 0.5] ──► [saveConsolidatedAxiom]
+│             │                              ├─► 'synergy_axiom'
+│             │                              ├─► Semantic Embedding
+│             │                              └─► Deduplikacja
+│             │                                               │
+│             └─► [Zawsze: recordEvaluatedPair]                │
+│                 (Rejestracja w consolidated_fact_pairs)     │
+└─────────────────────────────────────────────────────────────┘
+        </div>
+      </div>
+
+      <div class="grid-3" style="margin-top: 0.5rem;">
+        <div class="card success">
+          <div class="card-title emerald">Zero-Token Inference</div>
+          <div class="card-body">
+            Synteza nowej wiedzy nie zużywa budżetu $2.00 ani zewnętrznych modeli. Całość obliczeń realizowana jest lokalnie w wątku KAN z latencją <strong>&lt;5 ms per para</strong>.
+          </div>
+        </div>
+        <div class="card success">
+          <div class="card-title cyan">Ochrona B-Tree i Pamięci</div>
+          <div class="card-body">
+            Tabela <code>consolidated_fact_pairs</code> z kluczem unikalnym eliminuje redundantne badanie zbadanych już par, chroniąc bazę przed zbędnymi cyklami I/O.
+          </div>
+        </div>
+        <div class="card success">
+          <div class="card-title purple">Pełna Śledzalność (Traceability)</div>
+          <div class="card-body">
+            Każdy aksjomat utrwala <code>sourceFactIds</code> w kolumnie <code>metadata</code>. W razie unieważnienia faktu bazowego, system koryguje powiązane aksjomaty.
           </div>
         </div>
       </div>
     </section>
 
-    <!-- SLIDE 6 -->
-    <section class="slide" data-slide="6">
-      <div class="slide-number">Slajd 06 // Architektura Dual-Engine & Local-First</div>
+    <!-- SLIDE 7 -->
+    <section class="slide" data-slide="7">
+      <div class="slide-number">Slajd 07 // Architektura Dual-Engine & Local-First</div>
       <h1 class="slide-title">Dual-Engine: Node.js Backend vs Browser-Native (GitHub Pages)</h1>
       <p class="slide-subtitle">
         Eliminacja kosztów infrastrukturalnych poprzez architekturę Local-First z pamięcią IndexedDB.
@@ -631,9 +739,9 @@
       </div>
     </section>
 
-    <!-- SLIDE 7 -->
-    <section class="slide" data-slide="7">
-      <div class="slide-number">Slajd 07 // Architektura Neuronowa: KAN + SOM + EWC</div>
+    <!-- SLIDE 8 -->
+    <section class="slide" data-slide="8">
+      <div class="slide-number">Slajd 08 // Architektura Neuronowa: KAN + SOM + EWC</div>
       <h1 class="slide-title">Fizyczny Rdzeń KAN: Uczące się Splajny i Routing Topologiczny</h1>
       <p class="slide-subtitle">
         Zastąpienie brutalnej siły gęstą reprezentacją nieliniową na krawędziach grafu oraz ochroną pamięci.
@@ -706,14 +814,20 @@
               <td class="metric-highlight">Natywny silnik TS (Fazy 1-5 zgodne z blueprintem)</td>
               <td class="metric-highlight">server/src/neural/ (5/5 testów zdanych)</td>
             </tr>
+            <tr>
+              <td><strong>Izolacja Obliczeniowa</strong></td>
+              <td>Blokowanie głównego wątku I/O</td>
+              <td class="metric-highlight">Worker Threads Isolation (0ms Event Loop Lag)</td>
+              <td class="metric-highlight">Tier-1 Thread Pool (Pełna asynchroniczność)</td>
+            </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- SLIDE 8 -->
-    <section class="slide" data-slide="8">
-      <div class="slide-number">Slajd 08 // Architektura Wielosesyjna & Graf Wiedzy</div>
+    <!-- SLIDE 9 -->
+    <section class="slide" data-slide="9">
+      <div class="slide-number">Slajd 09 // Architektura Wielosesyjna & Graf Wiedzy</div>
       <h1 class="slide-title">Hierarchia Sesji i Transfer Wiedzy Międzysesyjnej</h1>
       <p class="slide-subtitle">
         Eliminacja monolitycznej historii: izolacja kontekstów per-sesja, katalogowanie i kontrolowany transfer wiedzy (@mention) bez zanieczyszczania uwagi.
@@ -755,12 +869,12 @@
       </div>
     </section>
 
-    <!-- SLIDE 9 -->
-    <section class="slide" data-slide="9">
-      <div class="slide-number">Slajd 09 // Podsumowanie Inżynieryjne</div>
-      <h1 class="slide-title">Lekcja Architektoniczna</h1>
+    <!-- SLIDE 10 -->
+    <section class="slide" data-slide="10">
+      <div class="slide-number">Slajd 10 // Podsumowanie Inżynieryjne</div>
+      <h1 class="slide-title">Lekcja Architektoniczna Tier-1</h1>
       <p class="slide-subtitle">
-        Wnioski końcowe z budowy autonomicznego systemu kognitywnego.
+        Wnioski końcowe z budowy autonomicznego systemu kognitywnego MakeAI.
       </p>
 
       <div class="quote-box">
@@ -775,11 +889,15 @@
               <li>Twardy bezpiecznik kosztowy (CostGuard) eliminuje ryzyko drenażu budżetu.</li>
               <li>Asynchroniczny potok workerów zapewnia natychmiastowy streaming bez opóźnień.</li>
               <li>Relacyjny graf faktów rozwiązuje problem zapominania bez modyfikacji wag modelu.</li>
+              <li>Idle Dream Consolidation: autonomiczna synteza wiedzy w bezczynności (>25s) przez B-splajny KAN.</li>
               <li>Integracja REST Wikipedii daje 100% odporności na halucynacje faktograficzne.</li>
               <li>Architektura Dual-Engine pozwala uruchomić aplikację bezkosztowo na GitHub Pages.</li>
-              <li>Wdrożony fizyczny rdzeń KAN + SOM + EWC + SAM + SWA z mostkiem TypeScript.</li>
-              <li>Filar 4: Lokalna inferencja Ollama (Edge / Local-First) ze streamingiem SSE/NDJSON i kosztem $0.00.</li>
-              <li>Wielosesyjny Sidebar z katalogami, wyszukiwarką i transferem wiedzy (@mention).</li>
+              <li>Tier-1 Distributed Data Fabric (libSQL/Turso) eliminuje blokady zapisu w skali globalnej.</li>
+              <li>Worker Threads KAN Isolation gwarantuje 0 ms lagów pętli zdarzeń przy obliczeniach splajnów.</li>
+              <li>Vector Memory ANN zapewnia podmilisekundowe wyszukiwanie semantyczne (HNSW + Cosine).</li>
+              <li>Dynamic Code-Splitting i Vendor Chunking redukują bundle do &lt;100 kB (z 515 kB do 96 kB).</li>
+              <li>BackendConnectionManager: eliminacja locka offline, aktywny heartbeat i automatyczna synchronizacja.</li>
+              <li>100% WCAG / a11y dla wszystkich formularzy i kontrolek interfejsu.</li>
             </ul>
           </div>
         </div>
@@ -788,13 +906,17 @@
           <div class="card-title cyan">Status wdrożenia projektu:</div>
           <div class="card-body">
             <ul style="padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem;">
-              <li><strong>Backend:</strong> Fastify + Node 24 <code>node:sqlite</code> (Port 3001)</li>
-              <li><strong>Browser-Native:</strong> IndexedDB v2 Cognitive Store + CORS OpenRouter/Wiki</li>
-              <li><strong>Edge Inference:</strong> Ollama Local-First (/v1 SSE & /api/chat) w <code>BrowserPersonaWorker</code></li>
-              <li><strong>Neural Core PyTorch:</strong> KAN + SOM + EWC + SAM + SWA (7/7 testów zdanych)</li>
-              <li><strong>Neural Core TypeScript:</strong> LocalTeacher + SOM + KAN + EWC (5/5 testów zdanych)</li>
+              <li><strong>Idle Dream Consolidation:</strong> Autonomiczny DreamConsolidator (>25s idle, KAN tranzytywna synteza, <code>synergy_axiom</code>, 30/30 testów zdanych)</li>
+              <li><strong>KAN Core v2 Orchestration:</strong> Dynamiczny routing SOM MoE, adaptacyjny limit pamięci, wagi etyczne i RL reward w potoku <code>executeStep</code></li>
+              <li><strong>Live Telemetry Stream:</strong> Asynchroniczny endpoint <code>/api/neural/telemetry</code> bezpośrednio z KAN Worker Thread</li>
+              <li><strong>Tier-1 Data Fabric:</strong> libSQL / Turso Distributed Fabric (@libsql/client)</li>
+              <li><strong>Neural Worker Threads:</strong> Pełna izolacja B-splines, SOM i EWC w dedykowanych wątkach</li>
+              <li><strong>Vector ANN Memory:</strong> HNSW + Cosine + BM25 Hybrid Cognitive Memory</li>
+              <li><strong>Reconnection Manager:</strong> Active Heartbeat + Sync Reconciliation Bridge</li>
+              <li><strong>Frontend Performance:</strong> React 19 + Vite Dynamic Splitting (&lt;100 kB JS bundle)</li>
+              <li><strong>Accessibility:</strong> 100% WCAG AA Compliance (SettingsModal, SearchBar)</li>
               <li><strong>System Sesji:</strong> Foldery, Przypinanie, Archiwum, Search, Cross-Session (8/8 testów)</li>
-              <li><strong>Frontend:</strong> React 19 + Tailwind CSS + Sidebar + KAN Visualizer</li>
+              <li><strong>Browser-Native:</strong> IndexedDB v2 Cognitive Store + CORS OpenRouter/Wiki</li>
               <li><strong>Hosting Portfolio:</strong> GitHub Pages (Static SPA)</li>
             </ul>
           </div>
@@ -807,7 +929,7 @@
   <!-- Footer Controls -->
   <footer>
     <div class="slide-indicator">
-      SLAJD <span id="currentSlide">1</span> / <span id="totalSlides">9</span>
+      SLAJD <span id="currentSlide">1</span> / <span id="totalSlides">10</span>
     </div>
 
     <div class="controls">

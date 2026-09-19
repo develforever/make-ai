@@ -19,11 +19,11 @@ export class CostGuardService {
     return Number((promptCost + completionCost).toFixed(6));
   }
 
-  public getStatus(): BudgetStatus {
-    const rawBudget = database.getSetting('total_budget_usd');
+  public async getStatus(): Promise<BudgetStatus> {
+    const rawBudget = await database.getSetting('total_budget_usd');
     const totalBudgetUsd = rawBudget ? parseFloat(rawBudget) : DEFAULT_CONFIG.TOTAL_BUDGET_USD;
 
-    const summary = database.getBudgetSummary();
+    const summary = await database.getBudgetSummary();
     const totalSpentUsd = Number(summary.totalSpentUsd.toFixed(6));
     const remainingBudgetUsd = Math.max(0, Number((totalBudgetUsd - totalSpentUsd).toFixed(6)));
     const percentageUsed = totalBudgetUsd > 0 ? Math.min(100, (totalSpentUsd / totalBudgetUsd) * 100) : 100;
@@ -46,14 +46,14 @@ export class CostGuardService {
     };
   }
 
-  public registerUsage(modelId: string, promptTokens: number, completionTokens: number, purpose: string): number {
+  public async registerUsage(modelId: string, promptTokens: number, completionTokens: number, purpose: string): Promise<number> {
     const cost = this.calculateCost(modelId, promptTokens, completionTokens);
-    database.logBudgetUsage(modelId, promptTokens, completionTokens, cost, purpose);
+    await database.logBudgetUsage(modelId, promptTokens, completionTokens, cost, purpose);
     return cost;
   }
 
-  public setBudget(newBudget: number): void {
-    database.setSetting('total_budget_usd', newBudget.toString());
+  public async setBudget(newBudget: number): Promise<void> {
+    await database.setSetting('total_budget_usd', newBudget.toString());
   }
 }
 

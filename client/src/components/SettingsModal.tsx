@@ -151,10 +151,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <form onSubmit={handleSave} className="space-y-5">
+          {/* Hidden username input for browser accessibility / autofill standard compliance */}
+          <input
+            type="text"
+            id="settings-form-username"
+            name="username"
+            autoComplete="username"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="sr-only"
+            defaultValue="makeai-user"
+          />
           {/* OpenRouter API Key */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-slate-300">Klucz OpenRouter API</label>
+              <label htmlFor="settings-api-key" className="text-xs font-semibold text-slate-300">Klucz OpenRouter API</label>
               <a
                 href="https://openrouter.ai/keys"
                 target="_blank"
@@ -165,7 +176,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </a>
             </div>
             <input
+              id="settings-api-key"
+              name="apiKey"
+              aria-label="Klucz OpenRouter API"
               type="password"
+              autoComplete="current-password"
               placeholder={keyStatus?.hasKey ? `Klucz aktywny (${keyStatus.maskedKey})` : 'Wklej sk-or-v1-...'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -186,8 +201,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Filar 4
                 </span>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label htmlFor="settings-use-local-ollama" className="relative inline-flex items-center cursor-pointer" aria-label="Włącz lub wyłącz lokalny model Ollama">
                 <input
+                  id="settings-use-local-ollama"
+                  name="useLocalOllama"
+                  aria-label="Używaj lokalnego modelu Ollama"
                   type="checkbox"
                   checked={useLocalOllama}
                   onChange={(e) => setUseLocalOllama(e.target.checked)}
@@ -202,9 +220,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-[11px] font-medium text-slate-300">Adres URL serwera Ollama</label>
+              <label htmlFor="settings-local-ollama-url" className="text-[11px] font-medium text-slate-300">Adres URL serwera Ollama</label>
               <div className="flex gap-2">
                 <input
+                  id="settings-local-ollama-url"
+                  name="localOllamaUrl"
+                  aria-label="Adres URL serwera Ollama"
                   type="text"
                   placeholder="http://localhost:11434"
                   value={localOllamaUrl}
@@ -256,11 +277,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Agent Name */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+            <label htmlFor="settings-agent-name" className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-purple-400" />
               Imię Agenta / Osobowości
             </label>
             <input
+              id="settings-agent-name"
+              name="agentName"
+              aria-label="Imię Agenta / Osobowości"
               type="text"
               value={agentName}
               onChange={(e) => setAgentName(e.target.value)}
@@ -270,11 +294,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Chat Model Selection */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+            <label htmlFor="settings-chat-model" className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-cyan-400" />
               Wiodący Model Konwersacyjny (Persona Worker)
             </label>
             <select
+              id="settings-chat-model"
+              name="chatModel"
+              aria-label="Wiodący Model Konwersacyjny"
               value={chatModel}
               onChange={(e) => setChatModel(e.target.value)}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"
@@ -297,10 +324,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Extraction Model Selection */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">
+            <label htmlFor="settings-extraction-model" className="text-xs font-semibold text-slate-300">
               Model Asynchronicznej Pamięci (Memory Worker)
             </label>
             <select
+              id="settings-extraction-model"
+              name="extractionModel"
+              aria-label="Model Asynchronicznej Pamięci"
               value={extractionModel}
               onChange={(e) => setExtractionModel(e.target.value)}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-cyan-500"

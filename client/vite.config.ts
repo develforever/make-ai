@@ -18,4 +18,33 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react/') || id.includes('react-dom/') || id.includes('scheduler')) {
+              return 'vendor-react';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (
+              id.includes('react-markdown') ||
+              id.includes('remark-gfm') ||
+              id.includes('micromark') ||
+              id.includes('mdast') ||
+              id.includes('unist') ||
+              id.includes('vfile') ||
+              id.includes('unified')
+            ) {
+              return 'vendor-markdown';
+            }
+            return 'vendor-misc';
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })

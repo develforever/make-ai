@@ -172,8 +172,14 @@ export const BrainVisualizer: React.FC<BrainVisualizerProps> = ({ facts, onRefre
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
             <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+              <label htmlFor="brain-memory-search" className="sr-only">
+                Szukaj w pamięci
+              </label>
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" aria-hidden="true" />
               <input
+                id="brain-memory-search"
+                name="brainMemorySearch"
+                aria-label="Szukaj w pamięci"
                 type="text"
                 placeholder="Szukaj w pamięci..."
                 value={searchTerm}
@@ -268,10 +274,13 @@ export const BrainVisualizer: React.FC<BrainVisualizerProps> = ({ facts, onRefre
           <form onSubmit={handleTeach} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
+                <label htmlFor="brain-fact-category" className="block text-xs font-medium text-slate-400 mb-1">
                   Kategoria
                 </label>
                 <select
+                  id="brain-fact-category"
+                  name="factCategory"
+                  aria-label="Kategoria wiedzy"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500"
@@ -284,10 +293,13 @@ export const BrainVisualizer: React.FC<BrainVisualizerProps> = ({ facts, onRefre
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
+                <label htmlFor="brain-fact-subject" className="block text-xs font-medium text-slate-400 mb-1">
                   Podmiot (Subject)
                 </label>
                 <input
+                  id="brain-fact-subject"
+                  name="factSubject"
+                  aria-label="Podmiot wiedzy"
                   type="text"
                   placeholder="np. Użytkownik / Model / Projekt"
                   value={subject}
@@ -297,10 +309,13 @@ export const BrainVisualizer: React.FC<BrainVisualizerProps> = ({ facts, onRefre
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
+                <label htmlFor="brain-fact-predicate" className="block text-xs font-medium text-slate-400 mb-1">
                   Relacja (Predicate)
                 </label>
                 <input
+                  id="brain-fact-predicate"
+                  name="factPredicate"
+                  aria-label="Relacja wiedzy"
                   type="text"
                   placeholder="np. ma na imię / lubi / zajmuje się"
                   value={predicate}
@@ -311,10 +326,13 @@ export const BrainVisualizer: React.FC<BrainVisualizerProps> = ({ facts, onRefre
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label htmlFor="brain-fact-object" className="block text-xs font-medium text-slate-400 mb-1">
                 Wartość / Dopełnienie (Object)
               </label>
               <input
+                id="brain-fact-object"
+                name="factObject"
+                aria-label="Wartość lub dopełnienie wiedzy"
                 type="text"
                 placeholder="np. Robert / programowanie w Rust / architekturą mikrousług"
                 value={object}

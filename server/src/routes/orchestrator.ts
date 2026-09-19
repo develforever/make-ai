@@ -3,6 +3,7 @@ import { orchestrator } from '../orchestrator/engine.js';
 import { database } from '../db/database.js';
 import { SUPPORTED_MODELS, DEFAULT_CONFIG } from '../config.js';
 import { wikipediaService } from '../services/wikipedia.js';
+import { dreamConsolidator } from '../services/dreamConsolidator.js';
 
 interface PauseBody {
   paused: boolean;
@@ -17,11 +18,12 @@ interface SettingsBody {
 export async function orchestratorRoutes(fastify: FastifyInstance) {
   // Status orkiestratora i workerów
   fastify.get('/api/orchestrator/status', async (_req, reply) => {
-    const isPaused = orchestrator.isPaused();
-    const agentName = database.getSetting('agent_name') || DEFAULT_CONFIG.AGENT_NAME;
-    const chatModel = database.getSetting('chat_model') || DEFAULT_CONFIG.DEFAULT_CHAT_MODEL;
-    const extractionModel = database.getSetting('extraction_model') || DEFAULT_CONFIG.DEFAULT_EXTRACTION_MODEL;
-    const logs = database.getRecentLogs(20);
+    const isPaused = await orchestrator.isPaused();
+    const agentName = (await database.getSetting('agent_name')) || DEFAULT_CONFIG.AGENT_NAME;
+    const chatModel = (await database.getSetting('chat_model')) || DEFAULT_CONFIG.DEFAULT_CHAT_MODEL;
+    const extractionModel = (await database.getSetting('extraction_model')) || DEFAULT_CONFIG.DEFAULT_EXTRACTION_MODEL;
+    const logs = await database.getRecentLogs(20);
+    const dreamStatus = dreamConsolidator.getStatus();
 
     return reply.send({
       isPaused,
@@ -29,6 +31,7 @@ export async function orchestratorRoutes(fastify: FastifyInstance) {
       chatModel,
       extractionModel,
       supportedModels: Object.values(SUPPORTED_MODELS),
+      dreamConsolidator: dreamStatus,
       logs
     });
   });
@@ -36,10 +39,10 @@ export async function orchestratorRoutes(fastify: FastifyInstance) {
   // Pauza / wznowienie pętli workerów
   fastify.post('/api/orchestrator/pause', async (request: FastifyRequest<{ Body: PauseBody }>, reply: FastifyReply) => {
     const { paused } = request.body || {};
-    orchestrator.setPaused(!!paused);
+    await orchestrator.setPaused(!!paused);
     return reply.send({
       success: true,
-      isPaused: orchestrator.isPaused()
+      isPaused: await orchestrator.isPaused()
     });
   });
 
@@ -48,35 +51,35 @@ export async function orchestratorRoutes(fastify: FastifyInstance) {
     const { agentName, chatModel, extractionModel } = request.body || {};
 
     if (agentName && typeof agentName === 'string') {
-      database.setSetting('agent_name', agentName.trim());
+      await database.setSetting('agent_name', agentName.trim());
     }
     if (chatModel && typeof chatModel === 'string' && SUPPORTED_MODELS[chatModel]) {
-      database.setSetting('chat_model', chatModel);
+      await database.setSetting('chat_model', chatModel);
     }
     if (extractionModel && typeof extractionModel === 'string' && SUPPORTED_MODELS[extractionModel]) {
-      database.setSetting('extraction_model', extractionModel);
+      await database.setSetting('extraction_model', extractionModel);
     }
 
-    database.logOrchestrator('Settings', 'update_config', 'success', 'Zaktualizowano konfigurację agenta');
+    await database.logOrchestrator('Settings', 'update_config', 'success', 'Zaktualizowano konfigurację agenta');
 
     return reply.send({
       success: true,
-      agentName: database.getSetting('agent_name'),
-      chatModel: database.getSetting('chat_model'),
-      extractionModel: database.getSetting('extraction_model')
+      agentName: await database.getSetting('agent_name'),
+      chatModel: await database.getSetting('chat_model'),
+      extractionModel: await database.getSetting('extraction_model')
     });
   });
 
   // Historia rozmów
   fastify.get('/api/conversations', async (_req, reply) => {
-    const messages = database.getRecentMessages(50);
+    const messages = await database.getRecentMessages(50);
     return reply.send({ messages });
   });
 
   // Reset historii rozmów
   fastify.post('/api/conversations/clear', async (_req, reply) => {
-    database.clearConversations();
-    database.logOrchestrator('Chat', 'clear_history', 'success', 'Wyczyszczono historię konwersacji');
+    await database.clearConversations();
+    await database.logOrchestrator('Chat', 'clear_history', 'success', 'Wyczyszczono historię konwersacji');
     return reply.send({ success: true, message: 'Historia rozmowy została wyczyszczona' });
   });
 
@@ -89,5 +92,22 @@ export async function orchestratorRoutes(fastify: FastifyInstance) {
 
     const result = await wikipediaService.getSummary(query);
     return reply.send(result);
+  });
+
+  // Ręczne wyzwolenie autonomicznego cyklu konsolidacji wiedzy (Dream Consolidation)
+  fastify.post('/api/orchestrator/dream-cycle', async (_req, reply) => {
+    try {
+      const synthesizedCount = await dreamConsolidator.runCycleNow();
+      return reply.send({
+        success: true,
+        synthesizedCount,
+        status: dreamConsolidator.getStatus()
+      });
+    } catch (err: any) {
+      return reply.status(500).send({
+        success: false,
+        error: err.message
+      });
+    }
   });
 }

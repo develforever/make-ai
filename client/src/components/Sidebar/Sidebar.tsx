@@ -152,7 +152,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
+            <label htmlFor="sidebar-new-folder-input" className="sr-only">
+              Nazwa nowego katalogu
+            </label>
             <input
+              id="sidebar-new-folder-input"
+              name="newFolderName"
+              aria-label="Nazwa nowego katalogu"
               type="text"
               placeholder="Nazwa katalogu..."
               value={newFolderName}

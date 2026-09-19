@@ -9,6 +9,10 @@ export interface ResolvedSessionReference {
   contextText: string;
 }
 
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.trim().length / 3.5));
+}
+
 export class SessionResolver {
   /**
    * Generuje natychmiastowy tytuł heurystyczny na podstawie pierwszej wiadomości użytkownika
@@ -32,10 +36,10 @@ export class SessionResolver {
    * Asynchroniczne doprecyzowanie tytułu sesji przez model LLM po pierwszej turze
    */
   public async refineTitleAsync(sessionId: string, userMessage: string, assistantReply: string): Promise<string | null> {
-    if (!openRouterClient.hasApiKey()) return null;
+    if (!(await openRouterClient.hasApiKey())) return null;
 
     try {
-      const model = database.getSetting('extraction_model') || DEFAULT_CONFIG.DEFAULT_EXTRACTION_MODEL;
+      const model = (await database.getSetting('extraction_model')) || DEFAULT_CONFIG.DEFAULT_EXTRACTION_MODEL;
       const prompt = `Jesteś modułem nadawania zwięzłych tytułów w systemie MakeAI.
 Na podstawie poniższej pierwszej tury rozmowy wymyśl bardzo krótki, precyzyjny tytuł sesji (od 2 do 5 słów w języku polskim).
 Zwróć WYŁĄCZNIE sam tytuł, bez cudzysłowów, znaków formatowania ani komentarzy.
@@ -54,7 +58,7 @@ Tytuł sesji:`;
 
       const title = response.content?.trim().replace(/^["']|["']$/g, '');
       if (title && title.length > 2 && title.length < 60) {
-        database.updateSession(sessionId, { title });
+        await database.updateSession(sessionId, { title });
         return title;
       }
     } catch (err: any) {
@@ -96,43 +100,136 @@ Tytuł sesji:`;
   }
 
   /**
-   * Pobiera i kompiluje kontekst dla wskazanych sesji powiązanych
-   * Gwarantuje twarde ograniczenie budżetu tokenów (max ~400 tokenów na sesję)
+   * Pobiera i kompiluje kontekst dla wskazanych sesji powiązanych.
+   * Gwarantuje twarde ograniczenie budżetu tokenów (maksymalnie 400 tokenów łącznie dla wszystkich sesji).
+   * Selekcjonuje najistotniejsze wiadomości dopasowane semantycznie do currentQuery bez sztucznego obcinania slice(0, 180).
    */
-  public resolveSessionContexts(sessionIds: string[]): ResolvedSessionReference[] {
+  public async resolveSessionContexts(sessionIds: string[], currentQuery: string = ''): Promise<ResolvedSessionReference[]> {
     const results: ResolvedSessionReference[] = [];
+    if (!sessionIds || sessionIds.length === 0) {
+      return results;
+    }
+
+    const MAX_TOTAL_TOKENS = 400;
+    let accumulatedTokens = 0;
+
+    const queryTokens = currentQuery
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length > 1);
+    const queryLower = currentQuery.trim().toLowerCase();
 
     for (const id of sessionIds) {
-      const session = database.getSession(id);
+      if (accumulatedTokens >= MAX_TOTAL_TOKENS) break;
+
+      const session = await database.getSession(id);
       if (!session) continue;
 
-      const messages = database.getRecentMessages(6, id);
-      if (messages.length === 0) continue;
+      const allMessages = await database.getAllSessionMessages(id);
+      if (allMessages.length === 0) continue;
 
-      // Wyciągnij kluczowe wypowiedzi (pierwsza i ostatnia tura)
-      const firstMsg = messages[0];
-      const lastMsg = messages[messages.length - 1];
+      // Ranking wiadomości w ramach sesji według trafności do zapytania użytkownika
+      const scoredMessages = allMessages.map((msg, index) => {
+        let score = 0;
+        const contentLower = (msg.content || '').toLowerCase();
 
-      let contextLines: string[] = [];
-      contextLines.push(`[ODWOŁANIE DO POWIĄZANEJ SESJI: "${session.title}" (ID: ${session.id})]`);
+        // Dopasowanie pełnej frazy
+        if (queryLower && contentLower.includes(queryLower)) {
+          score += 5.0;
+        }
+
+        // Nakładanie się tokenów
+        for (const token of queryTokens) {
+          if (contentLower.includes(token)) {
+            score += 1.5;
+          }
+        }
+
+        // Dopasowanie do tytułu sesji
+        if (queryLower && (session.title || '').toLowerCase().includes(queryLower)) {
+          score += 1.0;
+        }
+
+        // Współczynnik świeżości (ostatnie wypowiedzi są naturalnie istotniejsze)
+        const recencyBonus = (index / Math.max(1, allMessages.length)) * 1.0;
+        score += recencyBonus;
+
+        return { msg, score, index };
+      });
+
+      // Sortuj według wyniku malejąco
+      scoredMessages.sort((a, b) => b.score - a.score);
+
+      // Wybierz do 2-3 najbardziej relewantnych wypowiedzi i posortuj je chronologicznie
+      const selected = scoredMessages
+        .slice(0, 3)
+        .sort((a, b) => a.index - b.index)
+        .map((s) => s.msg);
+
+      // Budowanie linii kontekstu bez ucinania slice(0, 180)
+      const contextLines: string[] = [];
+      const header = `[ODWOŁANIE DO POWIĄZANEJ SESJI: "${session.title}" (ID: ${session.id})]`;
+      contextLines.push(header);
+
       if (session.summary) {
         contextLines.push(`Streszczenie sesji: ${session.summary}`);
       }
 
-      contextLines.push(`Początek dyskusji:`);
-      contextLines.push(`- Użytkownik: ${firstMsg.content.slice(0, 180)}`);
-      
-      if (messages.length > 1) {
-        contextLines.push(`Ostatnie ustalenia w tamtej sesji:`);
-        contextLines.push(`- ${lastMsg.role === 'assistant' ? 'Asystent' : 'Użytkownik'}: ${lastMsg.content.slice(0, 220)}`);
+      contextLines.push('Kluczowe ustalenia w tamtej sesji:');
+      for (const m of selected) {
+        const roleLabel = m.role === 'assistant' ? 'Asystent' : 'Użytkownik';
+        contextLines.push(`- ${roleLabel}: ${m.content}`);
       }
 
-      results.push({
-        sessionId: session.id,
-        title: session.title,
-        summary: session.summary || '',
-        contextText: contextLines.join('\n')
-      });
+      // Sprawdzenie i twarde przycięcie do budżetu 400 tokenów łącznie
+      let sessionText = '';
+      const candidateText = contextLines.join('\n');
+      const candidateTokens = estimateTokens(candidateText);
+
+      if (accumulatedTokens + candidateTokens <= MAX_TOTAL_TOKENS) {
+        sessionText = candidateText;
+        accumulatedTokens += candidateTokens;
+      } else {
+        // Stopniowe dopasowanie linii do pozostałego budżetu tokenów
+        const remainingTokens = MAX_TOTAL_TOKENS - accumulatedTokens;
+        if (remainingTokens < 25) {
+          // Zbyt mało miejsca na sensowny kontekst sesji
+          break;
+        }
+
+        const fittedLines: string[] = [header];
+        let currentTokens = estimateTokens(header);
+
+        for (let l = 1; l < contextLines.length; l++) {
+          const line = contextLines[l];
+          const lineTokens = estimateTokens(line);
+          if (currentTokens + lineTokens <= remainingTokens) {
+            fittedLines.push(line);
+            currentTokens += lineTokens;
+          } else {
+            // Jeśli linia jest kluczową wiadomością i mamy jeszcze trochę miejsca, dopełnij
+            const availableChars = Math.floor((remainingTokens - currentTokens) * 3.5);
+            if (availableChars > 40) {
+              fittedLines.push(line.slice(0, availableChars) + '...');
+              currentTokens = remainingTokens;
+            }
+            break;
+          }
+        }
+
+        sessionText = fittedLines.join('\n');
+        accumulatedTokens += currentTokens;
+      }
+
+      if (sessionText.trim()) {
+        results.push({
+          sessionId: session.id,
+          title: session.title,
+          summary: session.summary || '',
+          contextText: sessionText
+        });
+      }
     }
 
     return results;

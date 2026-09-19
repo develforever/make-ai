@@ -16,20 +16,20 @@ export interface CompletionResult {
 }
 
 export class OpenRouterClient {
-  private getApiKey(): string | null {
-    const fromDb = database.getSetting('openrouter_api_key');
+  private async getApiKey(): Promise<string | null> {
+    const fromDb = await database.getSetting('openrouter_api_key');
     if (fromDb && fromDb.trim().length > 5) {
       return fromDb.trim();
     }
     return process.env.OPENROUTER_API_KEY || null;
   }
 
-  public hasApiKey(): boolean {
-    return this.getApiKey() !== null;
+  public async hasApiKey(): Promise<boolean> {
+    return (await this.getApiKey()) !== null;
   }
 
-  public setApiKey(key: string): void {
-    database.setSetting('openrouter_api_key', key.trim());
+  public async setApiKey(key: string): Promise<void> {
+    await database.setSetting('openrouter_api_key', key.trim());
   }
 
   /**
@@ -41,12 +41,12 @@ export class OpenRouterClient {
     purpose: string = 'worker_extraction',
     temperature: number = 0.2
   ): Promise<CompletionResult> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error('Brak klucza OpenRouter API Key. Wprowadź klucz w ustawieniach aplikacji.');
     }
 
-    const budget = costGuard.getStatus();
+    const budget = await costGuard.getStatus();
     if (!budget.canProceed) {
       throw new Error(`Przekroczono bezpieczny limit budżetu ($${budget.remainingBudgetUsd} USD pozostało). Dalsze operacje wstrzymane.`);
     }
@@ -77,7 +77,7 @@ export class OpenRouterClient {
     const promptTokens = data.usage?.prompt_tokens || Math.ceil(JSON.stringify(messages).length / 4);
     const completionTokens = data.usage?.completion_tokens || Math.ceil(content.length / 4);
 
-    const costUsd = costGuard.registerUsage(model, promptTokens, completionTokens, purpose);
+    const costUsd = await costGuard.registerUsage(model, promptTokens, completionTokens, purpose);
 
     return {
       content,
@@ -97,12 +97,12 @@ export class OpenRouterClient {
     purpose: string = 'chat_conversation',
     temperature: number = 0.7
   ): AsyncGenerator<{ chunk: string; done: boolean; usage?: { promptTokens: number; completionTokens: number; costUsd: number } }> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error('Brak klucza OpenRouter API Key. Wprowadź klucz w ustawieniach.');
     }
 
-    const budget = costGuard.getStatus();
+    const budget = await costGuard.getStatus();
     if (!budget.canProceed) {
       throw new Error(`Przekroczono limit budżetu ($${budget.remainingBudgetUsd} USD pozostało). Operacje zablokowane.`);
     }
@@ -181,7 +181,7 @@ export class OpenRouterClient {
       finalCompletionTokens = Math.ceil(fullGeneratedText.length / 4);
     }
 
-    const costUsd = costGuard.registerUsage(model, finalPromptTokens, finalCompletionTokens, purpose);
+    const costUsd = await costGuard.registerUsage(model, finalPromptTokens, finalCompletionTokens, purpose);
 
     yield {
       chunk: '',

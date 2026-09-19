@@ -57,10 +57,16 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectSession }) => {
 
   return (
     <div className="relative w-full px-2 py-2" ref={searchRef}>
+      <label htmlFor="sidebar-session-search" className="sr-only">
+        Szukaj we wszystkich rozmowach
+      </label>
       <div className="relative flex items-center">
-        <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500 pointer-events-none" />
+        <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-500 pointer-events-none" aria-hidden="true" />
         <input
-          type="text"
+          id="sidebar-session-search"
+          name="sessionSearchQuery"
+          aria-label="Szukaj we wszystkich rozmowach"
+          type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {
@@ -70,10 +76,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectSession }) => {
           className="w-full bg-slate-900/90 border border-slate-800 focus:border-cyan-500/60 rounded-xl pl-8 pr-7 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 transition-all"
         />
         {isSearching ? (
-          <Loader2 className="w-3.5 h-3.5 absolute right-2.5 text-cyan-400 animate-spin" />
+          <Loader2 className="w-3.5 h-3.5 absolute right-2.5 text-cyan-400 animate-spin" aria-label="Wyszukiwanie w toku" />
         ) : query ? (
           <button
+            type="button"
             onClick={handleClear}
+            aria-label="Wyczyść wyszukiwanie"
             className="absolute right-2 text-slate-500 hover:text-slate-300 p-0.5"
           >
             <X className="w-3 h-3" />

@@ -22,7 +22,7 @@ export class WikipediaService {
     }
 
     // 1. Sprawdź cache bazy danych
-    const cached = database.getCachedWiki(cleanTerm);
+    const cached = await database.getCachedWiki(cleanTerm);
     if (cached) {
       return {
         found: true,
@@ -76,7 +76,7 @@ export class WikipediaService {
       }
 
       // 4. Zapisz do cache
-      database.saveCachedWiki(cleanTerm, exactTitle, extract, pageUrl);
+      await database.saveCachedWiki(cleanTerm, exactTitle, extract, pageUrl);
 
       return {
         found: true,

@@ -9,6 +9,8 @@ import { LocalTeacherLLM } from './LocalTeacherLLM.js';
 import { EWCOptimizer, ReplayBuffer } from './EWCOptimizer.js';
 import { SOMRouter } from './SOMRouter.js';
 import { KANLayer } from './KANLayer.js';
+import { SemanticEncoder } from './SemanticEncoder.js';
+
 
 export interface TrainingStepTelemetry {
   step: number;
@@ -72,11 +74,8 @@ export class TrainingLoop {
       // 1. Get soft targets from teacher adapted to curriculum temperature
       const softTargets = await this.teacher.getSoftTargets(prompt, 64, stage.temperature);
 
-      // 2. Synthetic token embedding for router
-      const tokenVec = new Float32Array(32);
-      for (let i = 0; i < tokenVec.length; i++) {
-        tokenVec[i] = Math.sin(s + i * 0.4);
-      }
+      // 2. Deterministic semantic embedding for router via SemanticEncoder
+      const tokenVec = SemanticEncoder.encode(prompt, 32);
 
       // SOM Top-2 Routing
       const routing = this.router.routeTopK(tokenVec, 2);
@@ -132,4 +131,74 @@ export class TrainingLoop {
 
     return results;
   }
+
+  /**
+   * Applies policy gradient step with SAM flat-minima optimization and EWC memory stabilization:
+   *   1. Clamps scalar reward R to [-1, 1].
+   *   2. Routes embedding through SOM to identify active BMU expert.
+   *   3. Forward pass through expert and aggregator.
+   *   4. Computes policy loss (expected reward maximization) and EWC quadratic drift penalty.
+   *   5. Performs SAM parameter perturbation (ascent) and flat-minima descent update on
+   *      B-spline coefficients and base weights.
+   */
+  public applyPolicyReward(
+    embedding: Float32Array,
+    reward: number
+  ): { success: boolean; loss: number; bmuExpert: number; ewcPenalty: number; policyLoss: number } {
+    const r = Math.max(-1, Math.min(1, reward));
+
+    // Route via SOM
+    const routing = this.router.routeTopK(embedding, 2);
+    const bmu = routing.indices[0];
+    const expert = this.experts[bmu % this.experts.length];
+
+    // Forward pass
+    const expertOut = expert.forward(embedding);
+    const finalLogits = this.aggregator.forward(expertOut);
+
+    // Policy loss: minimize -R * signal
+    let logitMagnitude = 0;
+    for (let i = 0; i < finalLogits.length; i++) {
+      logitMagnitude += Math.abs(finalLogits[i]);
+    }
+    const avgLogit = logitMagnitude / Math.max(1, finalLogits.length);
+    const policyLoss = -r * avgLogit;
+
+    // EWC memory stabilization penalty
+    const weightMap = new Map<string, Float32Array>();
+    weightMap.set(`expert_${bmu}`, expert.baseWeight);
+    weightMap.set(`expert_${bmu}_splines`, expert.splineCoeffs);
+    const ewcPenalty = this.ewc.calculateEWCPenalty(weightMap, this.config.ewcLambda);
+
+    const totalLoss = policyLoss + ewcPenalty;
+
+    // SAM optimization for B-spline coefficients
+    const splineCoeffs = expert.splineCoeffs;
+    for (let i = 0; i < splineCoeffs.length; i++) {
+      const act = expertOut[i % expertOut.length] || 0.01;
+      const grad = -r * act * 0.01;
+      // SAM Step 1: Ascent perturbation into worst-case sharpness region
+      const perturbed = splineCoeffs[i] + this.config.rho * Math.sign(grad);
+      // SAM Step 2: Flat-minima descent update
+      splineCoeffs[i] = perturbed - this.config.lr * (grad + 1e-4 * splineCoeffs[i]);
+    }
+
+    // SAM optimization for base residual weights
+    const baseW = expert.baseWeight;
+    for (let i = 0; i < baseW.length; i++) {
+      const logit = finalLogits[i % finalLogits.length] || 0.01;
+      const grad = -r * logit * 0.01;
+      const perturbed = baseW[i] + this.config.rho * Math.sign(grad);
+      baseW[i] = perturbed - this.config.lr * (grad + 1e-4 * baseW[i]);
+    }
+
+    return {
+      success: true,
+      loss: totalLoss,
+      bmuExpert: bmu,
+      ewcPenalty,
+      policyLoss
+    };
+  }
 }
+

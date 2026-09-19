@@ -9,16 +9,18 @@ import { database } from '../db/database.js';
 async function runTests() {
   console.log('=== Rozpoczęcie Testów Współbieżności i Selekcji Pamięci ===\n');
 
-  // TEST 1: Weryfikacja PRAGMA WAL w SQLite
-  console.log('Test 1: Weryfikacja trybu WAL i indeksów w SQLite...');
-  const row = (database as any).db.prepare('PRAGMA journal_mode;').get() as { journal_mode: string };
-  if (row.journal_mode.toLowerCase() !== 'wal') {
-    throw new Error(`Oczekiwano journal_mode=wal, otrzymano: ${row.journal_mode}`);
+  // TEST 1: Weryfikacja PRAGMA WAL w libSQL
+  console.log('Test 1: Weryfikacja trybu WAL i indeksów w libSQL...');
+  await database.ensureInitialized();
+  const pragmaRes = await database.client.execute('PRAGMA journal_mode;');
+  const journalMode = ((pragmaRes.rows[0]?.journal_mode as string) || '').toLowerCase();
+  if (journalMode !== 'wal') {
+    throw new Error(`Oczekiwano journal_mode=wal, otrzymano: ${journalMode}`);
   }
-  console.log(`✓ SQLite journal_mode: ${row.journal_mode.toUpperCase()}`);
+  console.log(`✓ libSQL journal_mode: ${journalMode.toUpperCase()}`);
 
-  const indexes = (database as any).db.prepare("SELECT name FROM sqlite_master WHERE type='index';").all() as { name: string }[];
-  const indexNames = new Set(indexes.map((i) => i.name));
+  const indexesRes = await database.client.execute("SELECT name FROM sqlite_master WHERE type='index';");
+  const indexNames = new Set(indexesRes.rows.map((i: any) => i.name));
   if (!indexNames.has('idx_facts_active_cat')) {
     throw new Error('Brak indeksu idx_facts_active_cat');
   }

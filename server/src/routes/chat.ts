@@ -16,7 +16,7 @@ export async function chatRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Wiadomość nie może być pusta' });
     }
 
-    if (!openRouterClient.hasApiKey()) {
+    if (!(await openRouterClient.hasApiKey())) {
       return reply.status(400).send({
         error: 'Brak klucza OpenRouter API. Skonfiguruj klucz w ustawieniach aplikacji.'
       });
@@ -39,6 +39,11 @@ export async function chatRoutes(fastify: FastifyInstance) {
       // 1. Jeśli pobrano kontekst z Wikipedii, wyślij zdarzenie do klienta
       if (turn.wikiContext && turn.wikiContext.found) {
         reply.raw.write(`event: wiki\ndata: ${JSON.stringify(turn.wikiContext)}\n\n`);
+      }
+
+      // 1b. Jeśli wyznaczono politykę KAN, wyślij zdarzenie do klienta
+      if (turn.kanPolicy) {
+        reply.raw.write(`event: kan_policy\ndata: ${JSON.stringify(turn.kanPolicy)}\n\n`);
       }
 
       let fullGeneratedText = '';

@@ -336,7 +336,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             <AtSign className="w-4 h-4" />
           </button>
 
+          <label htmlFor="chat-message-input" className="sr-only">
+            Wiadomość do rozmowy
+          </label>
           <textarea
+            id="chat-message-input"
+            name="chatMessage"
+            aria-label="Wiadomość do rozmowy"
             ref={textareaRef}
             rows={1}
             value={inputText}
